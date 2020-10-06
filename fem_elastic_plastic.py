@@ -41,6 +41,7 @@ def stiffness_matrix_element(B, De, E, nu, xi, xj, xm, zi, zj, zm):
     kloc = BTDB
     return kloc
 
+
 def stiffness_counter(B, De, E, nu, xi, xj, xm, zi, zj, zm):
     dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
     B[0, 0] = (zm - zj) / dlt
