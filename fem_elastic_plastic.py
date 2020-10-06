@@ -28,56 +28,23 @@ def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
     return BT
 
 
-def elastic_matrix_element(De, E, nu, xi, xj, xm, zi, zj, zm):
-    """dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
-    dlt = np.abs(dlt)
-    EnuS = E / (1 + nu) * dlt / 2"""
+def elastic_matrix_element(De, E, nu):
     EnuS = E / (1 + nu)
     De[0, 0] = (1 - nu) / (1 - 2 * nu) * EnuS
     De[0, 1] = nu / (1 - 2 * nu) * EnuS
-    De[0, 2] = 0
     De[1, 0] = De[0, 1]
     De[1, 1] = De[0, 0]
-    De[1, 2] = 0
-    De[2, 0] = 0
-    De[2, 1] = 0
     De[2, 2] = 0.5 * EnuS
     return De
 
 
-def stiffness_matrix_local(BT, De, B):
+def stiffness_matrix_local(BT, De, B, xi, xj, xm, zi, zj, zm):
+    dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
+    dlt = np.abs(dlt) / 2
     BTD = np.dot(BT, De)
     BTDB = np.dot(BTD, B)
-    kloc = BTDB
+    kloc = BTDB * dlt
     return kloc
-
-
-def stiffness_counter(B, De, E, nu, xi, xj, xm, zi, zj, zm):
-    dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
-    B[0, 0] = (zm - zj) / dlt
-    B[0, 2] = (zi - zm) / dlt
-    B[0, 4] = (zj - zi) / dlt
-    B[1, 1] = (xj - xm) / dlt
-    B[1, 3] = (xm - xi) / dlt
-    B[1, 5] = (xi - xj) / dlt
-    B[2, 0] = B[1, 1]
-    B[2, 1] = B[0, 0]
-    B[2, 2] = B[1, 3]
-    B[2, 3] = B[0, 2]
-    B[2, 4] = B[1, 5]
-    B[2, 5] = B[0, 4]
-    dlt = np.abs(dlt)
-    EnuS = E / (1 + nu) * dlt / 2
-    De[0, 0] = (1 - nu) / (1 - 2 * nu) * EnuS
-    De[0, 1] = nu / (1 - 2 * nu) * EnuS
-    De[0, 2] = 0
-    De[1, 0] = De[0, 1]
-    De[1, 1] = De[0, 0]
-    De[1, 2] = 0
-    De[2, 0] = 0
-    De[2, 1] = 0
-    De[2, 2] = 0.5 * EnuS
-    return dlt
 
 
 def stiffness_matrix_total(kglob, ki, kj, kloc, km):
@@ -97,6 +64,26 @@ def stiffness_matrix_total(kglob, ki, kj, kloc, km):
                 nk2 = km * 2 + j1 - 6
             kglob[nk1, nk2] = kglob[nk1, nk2] + kloc[i1, j1]
     return kglob
+
+
+def strains(u, B, ki, kj, km, k, dex, dez, dexz):
+    dex[k - 1] = (u[2 * ki - 2] * B[0, 0] + u[2 * kj - 2] * B[0, 2] + u[2 * km - 2] * B[0, 4])
+    dez[k - 1] = (u[2 * ki - 1] * B[1, 1] + u[2 * kj - 1] * B[1, 3] + u[2 * km - 1] * B[1, 5])
+    dexz[k - 1] = (u[2 * ki - 2] * B[2, 0] + u[2 * kj - 2] * B[2, 2] + u[2 * km - 2] * B[2, 4]
+                   + u[2 * ki - 1] * B[2, 1] + u[2 * kj - 1] * B[2, 3] + u[2 * km - 1] * B[2, 5])
+    return dex, dez, dexz
+
+
+def stresses(De, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3):
+    dsx[k - 1] = De[0, 0] * dex[k - 1] + De[0, 1] * dez[k - 1] + De[0, 2] * dexz[k - 1]
+    dsz[k - 1] = De[1, 0] * dex[k - 1] + De[1, 1] * dez[k - 1] + De[1, 2] * dexz[k - 1]
+    dtxz[k - 1] = De[2, 0] * dex[k - 1] + De[2, 1] * dez[k - 1] + De[2, 2] * dexz[k - 1]
+
+    s1[k - 1] = (dsx[k - 1] + dsz[k - 1]) / 2 + np.sqrt((dsx[k - 1] - dsz[k - 1])
+                                                        ** 2 / 4 + dtxz[k - 1] ** 2)
+    s3[k - 1] = (dsx[k - 1] + dsz[k - 1]) / 2 - np.sqrt((dsx[k - 1] - dsz[k - 1])
+                                                        ** 2 / 4 + dtxz[k - 1] ** 2)
+    return dsx, dsz, dtxz, s1, s3
 
 
 class Application(Frame):
@@ -294,8 +281,8 @@ class Application(Frame):
                 zj = kz[j, i - 1]
                 zm = kz[j - 1, i]
                 BT = geometry_matrix_element(B, xi, xj, xm, zi, zj, zm)
-                De = elastic_matrix_element(De, E, nu, xi, xj, xm, zi, zj, zm)
-                kloc = stiffness_matrix_local(BT, De, B)
+                De = elastic_matrix_element(De, E, nu)
+                kloc = stiffness_matrix_local(BT, De, B, xi, xj, xm, zi, zj, zm)
                 kglob = stiffness_matrix_total(kglob, ki, kj, kloc, km)
 
                 k = k + 1
@@ -311,8 +298,8 @@ class Application(Frame):
                 zj = kz[j - 1, i]
                 zm = kz[j, i]
                 BT = geometry_matrix_element(B, xi, xj, xm, zi, zj, zm)
-                De = elastic_matrix_element(De, E, nu, xi, xj, xm, zi, zj, zm)
-                kloc = stiffness_matrix_local(BT, De, B)
+                De = elastic_matrix_element(De, E, nu)
+                kloc = stiffness_matrix_local(BT, De, B, xi, xj, xm, zi, zj, zm)
                 kglob = stiffness_matrix_total(kglob, ki, kj, kloc, km)
 
         # Boundary conditions
@@ -346,14 +333,14 @@ class Application(Frame):
         u = np.dot(kglob_obr, R)
 
         # Get Strains and deforms
-        eps_x = np.zeros(nel)
-        eps_z = np.zeros(nel)
-        eps_xz = np.zeros(nel)
-        sigma_x = np.zeros(nel)
-        sigma_z = np.zeros(nel)
-        tau_xz = np.zeros(nel)
-        sigma_1 = np.zeros(nel)
-        sigma_3 = np.zeros(nel)
+        dex = np.zeros(nel)
+        dez = np.zeros(nel)
+        dexz = np.zeros(nel)
+        dsx = np.zeros(nel)
+        dsz = np.zeros(nel)
+        dtxz = np.zeros(nel)
+        s1 = np.zeros(nel)
+        s3 = np.zeros(nel)
 
         k = 0
         for i in range(1, nw + 1):
@@ -371,21 +358,10 @@ class Application(Frame):
                 zj = kz[j, i - 1]
                 zm = kz[j - 1, i]
 
-                dlt = stiffness_counter(B, De, E, nu, xi, xj, xm, zi, zj, zm)
-
-                eps_x[k - 1] = (u[2 * ki - 2] * B[0, 0] + u[2 * kj - 2] * B[0, 2] + u[2 * km - 2] * B[0, 4])
-                eps_z[k - 1] = (u[2 * ki - 1] * B[1, 1] + u[2 * kj - 1] * B[1, 3] + u[2 * km - 1] * B[1, 5])
-                eps_xz[k - 1] = (u[2 * ki - 2] * B[2, 0] + u[2 * kj - 2] * B[2, 2] + u[2 * km - 2] * B[2, 4]
-                                 + u[2 * ki - 1] * B[2, 1] + u[2 * kj - 1] * B[2, 3] + u[2 * km - 1] * B[2, 5])
-
-                sigma_x[k - 1] = (De[0, 0] * eps_x[k - 1] + De[0, 1] * eps_z[k - 1]) / dlt * 2
-                sigma_z[k - 1] = (De[1, 0] * eps_x[k - 1] + De[1, 1] * eps_z[k - 1]) / dlt * 2
-                tau_xz[k - 1] = De[2, 2] * eps_xz[k - 1] / dlt * 2
-
-                sigma_1[k - 1] = (sigma_x[k - 1] + sigma_z[k - 1]) / 2 + np.sqrt((sigma_x[k - 1] - sigma_z[k - 1])
-                                                                                 ** 2 / 4 + tau_xz[k - 1] ** 2)
-                sigma_3[k - 1] = (sigma_x[k - 1] + sigma_z[k - 1]) / 2 - np.sqrt((sigma_x[k - 1] - sigma_z[k - 1])
-                                                                                 ** 2 / 4 + tau_xz[k - 1] ** 2)
+                B = np.transpose(geometry_matrix_element(B, xi, xj, xm, zi, zj, zm))
+                De = elastic_matrix_element(De, E, nu)
+                dex, dez, dexz = strains(u, B, ki, kj, km, k, dex, dez, dexz)
+                dsx, dsz, dtxz, s1, s3 = stresses(De, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3)
 
                 k = k + 1
                 m = (k + 2) // 2 + i - 1
@@ -400,21 +376,10 @@ class Application(Frame):
                 zj = kz[j - 1, i]
                 zm = kz[j, i]
 
-                dlt = stiffness_counter(B, De, E, nu, xi, xj, xm, zi, zj, zm)
-
-                eps_x[k - 1] = (u[2 * ki - 2] * B[0, 0] + u[2 * kj - 2] * B[0, 2] + u[2 * km - 2] * B[0, 4])
-                eps_z[k - 1] = (u[2 * ki - 1] * B[1, 1] + u[2 * kj - 1] * B[1, 3] + u[2 * km - 1] * B[1, 5])
-                eps_xz[k - 1] = (u[2 * ki - 2] * B[2, 0] + u[2 * kj - 2] * B[2, 2] + u[2 * km - 2] * B[2, 4]
-                                 + u[2 * ki - 1] * B[2, 1] + u[2 * kj - 1] * B[2, 3] + u[2 * km - 1] * B[2, 5])
-
-                sigma_x[k - 1] = (De[0, 0] * eps_x[k - 1] + De[0, 1] * eps_z[k - 1]) / dlt * 2
-                sigma_z[k - 1] = (De[1, 0] * eps_x[k - 1] + De[1, 1] * eps_z[k - 1]) / dlt * 2
-                tau_xz[k - 1] = De[2, 2] * eps_xz[k - 1] / dlt * 2
-
-                sigma_1[k - 1] = (sigma_x[k - 1] + sigma_z[k - 1]) / 2 + np.sqrt((sigma_x[k - 1] - sigma_z[k - 1])
-                                                                                 ** 2 / 4 + tau_xz[k - 1] ** 2)
-                sigma_3[k - 1] = (sigma_x[k - 1] + sigma_z[k - 1]) / 2 - np.sqrt((sigma_x[k - 1] - sigma_z[k - 1])
-                                                                                 ** 2 / 4 + tau_xz[k - 1] ** 2)
+                B = np.transpose(geometry_matrix_element(B, xi, xj, xm, zi, zj, zm))
+                De = elastic_matrix_element(De, E, nu)
+                dex, dez, dexz = strains(u, B, ki, kj, km, k, dex, dez, dexz)
+                dsx, dsz, dtxz, s1, s3 = stresses(De, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3)
 
         u_new = np.zeros(n)
         for i, j in zip(range(0, n * 2, 2), range(n + 1)):
@@ -511,35 +476,35 @@ class Application(Frame):
             ws1.cell(row=i + 2, column=1).value = i + 1
             ws1.cell(row=i + 2, column=1).alignment = align_center
             ws1.cell(row=i + 2, column=1).border = border
-            ws1.cell(row=i + 2, column=2).value = sigma_x[i]
+            ws1.cell(row=i + 2, column=2).value = dsx[i]
             ws1.cell(row=i + 2, column=2).alignment = align_center
             ws1.cell(row=i + 2, column=2).border = border
             ws1.cell(row=i + 2, column=2).number_format = '0.000'
-            ws1.cell(row=i + 2, column=3).value = sigma_z[i]
+            ws1.cell(row=i + 2, column=3).value = dsz[i]
             ws1.cell(row=i + 2, column=3).alignment = align_center
             ws1.cell(row=i + 2, column=3).border = border
             ws1.cell(row=i + 2, column=3).number_format = '0.000'
-            ws1.cell(row=i + 2, column=4).value = tau_xz[i]
+            ws1.cell(row=i + 2, column=4).value = dtxz[i]
             ws1.cell(row=i + 2, column=4).alignment = align_center
             ws1.cell(row=i + 2, column=4).border = border
             ws1.cell(row=i + 2, column=4).number_format = '0.000'
-            ws1.cell(row=i + 2, column=5).value = sigma_1[i]
+            ws1.cell(row=i + 2, column=5).value = s1[i]
             ws1.cell(row=i + 2, column=5).alignment = align_center
             ws1.cell(row=i + 2, column=5).border = border
             ws1.cell(row=i + 2, column=5).number_format = '0.000'
-            ws1.cell(row=i + 2, column=6).value = sigma_3[i]
+            ws1.cell(row=i + 2, column=6).value = s3[i]
             ws1.cell(row=i + 2, column=6).alignment = align_center
             ws1.cell(row=i + 2, column=6).border = border
             ws1.cell(row=i + 2, column=6).number_format = '0.000'
-            ws1.cell(row=i + 2, column=7).value = eps_x[i]
+            ws1.cell(row=i + 2, column=7).value = dex[i]
             ws1.cell(row=i + 2, column=7).alignment = align_center
             ws1.cell(row=i + 2, column=7).border = border
             ws1.cell(row=i + 2, column=7).number_format = '0.000'
-            ws1.cell(row=i + 2, column=8).value = eps_z[i]
+            ws1.cell(row=i + 2, column=8).value = dez[i]
             ws1.cell(row=i + 2, column=8).alignment = align_center
             ws1.cell(row=i + 2, column=8).border = border
             ws1.cell(row=i + 2, column=8).number_format = '0.000'
-            ws1.cell(row=i + 2, column=9).value = eps_xz[i]
+            ws1.cell(row=i + 2, column=9).value = dexz[i]
             ws1.cell(row=i + 2, column=9).alignment = align_center
             ws1.cell(row=i + 2, column=9).border = border
             ws1.cell(row=i + 2, column=9).number_format = '0.000'
