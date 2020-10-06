@@ -41,6 +41,33 @@ def stiffness_matrix_element(B, De, E, nu, xi, xj, xm, zi, zj, zm):
     kloc = BTDB
     return kloc
 
+def stiffness_counter(B, De, E, nu, xi, xj, xm, zi, zj, zm):
+    dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
+    B[0, 0] = (zm - zj) / dlt
+    B[0, 2] = (zi - zm) / dlt
+    B[0, 4] = (zj - zi) / dlt
+    B[1, 1] = (xj - xm) / dlt
+    B[1, 3] = (xm - xi) / dlt
+    B[1, 5] = (xi - xj) / dlt
+    B[2, 0] = B[1, 1]
+    B[2, 1] = B[0, 0]
+    B[2, 2] = B[1, 3]
+    B[2, 3] = B[0, 2]
+    B[2, 4] = B[1, 5]
+    B[2, 5] = B[0, 4]
+    dlt = np.abs(dlt)
+    EnuS = E / (1 + nu) * dlt / 2
+    De[0, 0] = (1 - nu) / (1 - 2 * nu) * EnuS
+    De[0, 1] = nu / (1 - 2 * nu) * EnuS
+    De[0, 2] = 0
+    De[1, 0] = De[0, 1]
+    De[1, 1] = De[0, 0]
+    De[1, 2] = 0
+    De[2, 0] = 0
+    De[2, 1] = 0
+    De[2, 2] = 0.5 * EnuS
+    return dlt
+
 
 def stiffness_matrix_total(kglob, ki, kj, kloc, km):
     for i1 in range(0, 6):
@@ -329,7 +356,7 @@ class Application(Frame):
                 zj = kz[j, i - 1]
                 zm = kz[j - 1, i]
 
-                dlt = np.abs(xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj))
+                dlt = stiffness_counter(B, De, E, nu, xi, xj, xm, zi, zj, zm)
 
                 eps_x[k - 1] = (u[2 * ki - 2] * B[0, 0] + u[2 * kj - 2] * B[0, 2] + u[2 * km - 2] * B[0, 4])
                 eps_z[k - 1] = (u[2 * ki - 1] * B[1, 1] + u[2 * kj - 1] * B[1, 3] + u[2 * km - 1] * B[1, 5])
@@ -358,7 +385,7 @@ class Application(Frame):
                 zj = kz[j - 1, i]
                 zm = kz[j, i]
 
-                dlt = np.abs(xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj))
+                dlt = stiffness_counter(B, De, E, nu, xi, xj, xm, zi, zj, zm)
 
                 eps_x[k - 1] = (u[2 * ki - 2] * B[0, 0] + u[2 * kj - 2] * B[0, 2] + u[2 * km - 2] * B[0, 4])
                 eps_z[k - 1] = (u[2 * ki - 1] * B[1, 1] + u[2 * kj - 1] * B[1, 3] + u[2 * km - 1] * B[1, 5])
@@ -506,7 +533,7 @@ class Application(Frame):
 
 
 main_window = Tk()
-main_window.title("FEM elastic simple")
+main_window.title("FEM elastic plastic")
 main_window.geometry("260x170")
 main_window.resizable(0, 0)
 main_window.attributes("-toolwindow", 0)
