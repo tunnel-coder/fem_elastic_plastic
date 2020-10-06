@@ -10,7 +10,7 @@ from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Border, Side, Alignment
 
 
-def stiffness_matrix_element(B, De, E, nu, xi, xj, xm, zi, zj, zm):
+def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
     dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
     B[0, 0] = (zm - zj) / dlt
     B[0, 2] = (zi - zm) / dlt
@@ -25,8 +25,14 @@ def stiffness_matrix_element(B, De, E, nu, xi, xj, xm, zi, zj, zm):
     B[2, 4] = B[1, 5]
     B[2, 5] = B[0, 4]
     BT = np.transpose(B)
+    return BT
+
+
+def elastic_matrix_element(De, E, nu, xi, xj, xm, zi, zj, zm):
+    """dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
     dlt = np.abs(dlt)
-    EnuS = E / (1 + nu) * dlt / 2
+    EnuS = E / (1 + nu) * dlt / 2"""
+    EnuS = E / (1 + nu)
     De[0, 0] = (1 - nu) / (1 - 2 * nu) * EnuS
     De[0, 1] = nu / (1 - 2 * nu) * EnuS
     De[0, 2] = 0
@@ -36,6 +42,10 @@ def stiffness_matrix_element(B, De, E, nu, xi, xj, xm, zi, zj, zm):
     De[2, 0] = 0
     De[2, 1] = 0
     De[2, 2] = 0.5 * EnuS
+    return De
+
+
+def stiffness_matrix_local(BT, De, B):
     BTD = np.dot(BT, De)
     BTDB = np.dot(BTD, B)
     kloc = BTDB
@@ -283,7 +293,9 @@ class Application(Frame):
                 zi = kz[j - 1, i - 1]
                 zj = kz[j, i - 1]
                 zm = kz[j - 1, i]
-                kloc = stiffness_matrix_element(B, De, E, nu, xi, xj, xm, zi, zj, zm)
+                BT = geometry_matrix_element(B, xi, xj, xm, zi, zj, zm)
+                De = elastic_matrix_element(De, E, nu, xi, xj, xm, zi, zj, zm)
+                kloc = stiffness_matrix_local(BT, De, B)
                 kglob = stiffness_matrix_total(kglob, ki, kj, kloc, km)
 
                 k = k + 1
@@ -298,7 +310,9 @@ class Application(Frame):
                 zi = kz[j, i - 1]
                 zj = kz[j - 1, i]
                 zm = kz[j, i]
-                kloc = stiffness_matrix_element(B, De, E, nu, xi, xj, xm, zi, zj, zm)
+                BT = geometry_matrix_element(B, xi, xj, xm, zi, zj, zm)
+                De = elastic_matrix_element(De, E, nu, xi, xj, xm, zi, zj, zm)
+                kloc = stiffness_matrix_local(BT, De, B)
                 kglob = stiffness_matrix_total(kglob, ki, kj, kloc, km)
 
         # Boundary conditions
