@@ -3,11 +3,16 @@ import numpy as np
 
 # создание окна
 from tkinter import *
-from tkinter.ttk import *
-import matplotlib.pyplot as plt
+
 import matplotlib.ticker as ticker
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
+
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Border, Side, Alignment
+
+"""def funcplast(fi, c):
+    funcplast = np.sqrt((szFp - sxFp) ** 2 + 4 * txzFp ** 2) - ((szFp + sxFp) * np.sin(fi) + 2 * c * np.cos(fi))"""
 
 
 def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
@@ -29,12 +34,12 @@ def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
 
 
 def elastic_matrix_element(De, E, nu):
-    EnuS = E / (1 + nu)
-    De[0, 0] = (1 - nu) / (1 - 2 * nu) * EnuS
-    De[0, 1] = nu / (1 - 2 * nu) * EnuS
+    Enu = E / (1 + nu)
+    De[0, 0] = (1 - nu) / (1 - 2 * nu) * Enu
+    De[0, 1] = nu / (1 - 2 * nu) * Enu
     De[1, 0] = De[0, 1]
     De[1, 1] = De[0, 0]
-    De[2, 2] = 0.5 * EnuS
+    De[2, 2] = 0.5 * Enu
     return De
 
 
@@ -94,120 +99,80 @@ class Application(Frame):
 
     def create_widgets(self):
         # Elastic_modulus
-        Label(self,
-              text="E ="
-              ).grid(row=0, column=0)
+        Label(self, text="E =").grid(row=0, column=0)
         self.E_ent = Entry(self, width=5, justify=CENTER)
         self.E_ent.grid(row=0, column=1)
         self.E_ent.insert(0, "10000")
-        Label(self,
-              text="kPa"
-              ).grid(row=0, column=2, sticky=W)
+        Label(self, text="kPa").grid(row=0, column=2)
+
         # Poissons_ratio
-        Label(self,
-              text="v ="
-              ).grid(row=1, column=0)
+        Label(self, text="v =").grid(row=1, column=0)
         self.nu_ent = Entry(self, width=5, justify=CENTER)
         self.nu_ent.grid(row=1, column=1)
         self.nu_ent.insert(0, "0.3")
-        Label(self,
-              text=""
-              ).grid(row=1, column=2, sticky=W)
+
         # Cohesion
-        Label(self,
-              text="c ="
-              ).grid(row=2, column=0)
+        Label(self, text="c =").grid(row=2, column=0)
         self.c_ent = Entry(self, width=5, justify=CENTER)
         self.c_ent.grid(row=2, column=1)
         self.c_ent.insert(0, "10")
-        Label(self,
-              text="kPa"
-              ).grid(row=2, column=2, sticky=W)
+        Label(self, text="kPa").grid(row=2, column=2)
+
         # Friction angle
-        Label(self,
-              text="φ ="
-              ).grid(row=3, column=0)
+        Label(self, text="φ =").grid(row=3, column=0)
         self.fi_ent = Entry(self, width=5, justify=CENTER)
         self.fi_ent.grid(row=3, column=1)
         self.fi_ent.insert(0, "30")
-        Label(self,
-              text="°"
-              ).grid(row=3, column=2, sticky=W)
+        Label(self, text="°").grid(row=3, column=2)
+
         # Pressure
-        Label(self,
-              text="P ="
-              ).grid(row=4, column=0)
+        Label(self, text="P =").grid(row=4, column=0)
         self.pLoad_ent = Entry(self, width=5, justify=CENTER)
         self.pLoad_ent.grid(row=4, column=1)
         self.pLoad_ent.insert(0, "1000")
-        Label(self,
-              text="kPa"
-              ).grid(row=4, column=2, sticky=W)
+        Label(self, text="kPa").grid(row=4, column=2)
+
         # Stamp width
-        Label(self,
-              text="b ="
-              ).grid(row=0, column=4)
+        Label(self, text="b =").grid(row=5, column=0)
         self.b_ent = Entry(self, width=5, justify=CENTER)
-        self.b_ent.grid(row=0, column=5)
+        self.b_ent.grid(row=5, column=1)
         self.b_ent.insert(0, "2")
-        Label(self,
-              text="m"
-              ).grid(row=0, column=6, sticky=W)
+        Label(self, text="m").grid(row=5, column=2)
+
         # Object width
-        Label(self,
-              text="ws ="
-              ).grid(row=1, column=4)
+        Label(self, text="ws =").grid(row=6, column=0)
         self.ws_ent = Entry(self, width=5, justify=CENTER)
-        self.ws_ent.grid(row=1, column=5)
+        self.ws_ent.grid(row=6, column=1)
         self.ws_ent.insert(0, "5")
-        Label(self,
-              text="m"
-              ).grid(row=1, column=6, sticky=W)
+        Label(self, text="m").grid(row=6, column=2)
+
         # Object height
-        Label(self,
-              text="hs ="
-              ).grid(row=2, column=4)
+        Label(self, text="hs =").grid(row=7, column=0)
         self.hs_ent = Entry(self, width=5, justify=CENTER)
-        self.hs_ent.grid(row=2, column=5)
+        self.hs_ent.grid(row=7, column=1)
         self.hs_ent.insert(0, "4")
-        Label(self,
-              text="m"
-              ).grid(row=2, column=6, sticky=W)
+        Label(self, text="m").grid(row=7, column=2)
+
         # Width_number
-        Label(self,
-              text="nw ="
-              ).grid(row=3, column=4)
+        Label(self, text="nw =").grid(row=8, column=0)
         self.nw_ent = Entry(self, width=5, justify=CENTER)
-        self.nw_ent.grid(row=3, column=5)
+        self.nw_ent.grid(row=8, column=1)
         self.nw_ent.insert(0, "20")
-        Label(self,
-              text=""
-              ).grid(row=3, column=6, sticky=W)
+
         # Height_number
-        Label(self,
-              text="nh ="
-              ).grid(row=4, column=4)
+        Label(self, text="nh =").grid(row=9, column=0)
         self.nh_ent = Entry(self, width=5, justify=CENTER)
-        self.nh_ent.grid(row=4, column=5)
+        self.nh_ent.grid(row=9, column=1)
         self.nh_ent.insert(0, "16")
-        Label(self,
-              text=""
-              ).grid(row=4, column=6, sticky=W)
+
         # Stamp_number
-        Label(self,
-              text="nb ="
-              ).grid(row=5, column=4)
+        Label(self, text="nb =").grid(row=10, column=0)
         self.nb_ent = Entry(self, width=5, justify=CENTER)
-        self.nb_ent.grid(row=5, column=5)
+        self.nb_ent.grid(row=10, column=1)
         self.nb_ent.insert(0, "12")
-        Label(self,
-              text=""
-              ).grid(row=5, column=6, sticky=W)
+
         # Btn_count
-        Button(self,
-               text="Решить, записать результаты в Excel",
-               command=self.solver
-               ).grid(row=7, column=0, columnspan=6)
+        Button(self, text="Решить", command=self.solver).grid(row=11, column=0, columnspan=3)
 
     def input(self):
         E = float(self.E_ent.get())
@@ -232,8 +197,25 @@ class Application(Frame):
         # Elements number
         nel = nw * nh * 2
         fi = fi * np.pi / 180
+        # Matrices create
         kx = np.zeros((nh + 1, nw + 1))
         kz = np.zeros((nh + 1, nw + 1))
+        B = np.zeros((3, 6))
+        De = np.zeros((3, 3))
+        kglob = np.zeros((n * 2, n * 2))
+        R = np.zeros(n * 2)
+        u = np.zeros(n * 2)
+        n_nmb = np.zeros((nh + 1, nw + 1))
+        dex = np.zeros(nel)
+        dez = np.zeros(nel)
+        dexz = np.zeros(nel)
+        dsx = np.zeros(nel)
+        dsz = np.zeros(nel)
+        dtxz = np.zeros(nel)
+        s1 = np.zeros(nel)
+        s3 = np.zeros(nel)
+        pl = np.zeros(nel)
+
         xk = 0
         zk = 0
         for i in range(nb):
@@ -254,17 +236,15 @@ class Application(Frame):
         kzt = np.transpose(kz)
 
         # Nodes numbers
-        n_nmb = np.zeros((nh + 1, nw + 1))
         number = 1
         for i in range(nw + 1):
             for j in range(nh + 1):
                 n_nmb[j, i] = number
                 number += 1
 
+
+
         # Stiffness matrix
-        B = np.zeros((3, 6))
-        De = np.zeros((3, 3))
-        kglob = np.zeros((n * 2, n * 2))
         k = 0
         for i in range(1, nw + 1):
             for j in range(1, nh + 1):
@@ -303,9 +283,6 @@ class Application(Frame):
                 kglob = stiffness_matrix_total(kglob, ki, kj, kloc, km)
 
         # Boundary conditions
-        R = np.zeros(n * 2)
-        u = np.zeros(n * 2)
-
         for i in range(1, nb + 2):
             j = ((i - 1) * nh + i) * 2
             if i == 1 or i == nb + 1:
@@ -333,15 +310,6 @@ class Application(Frame):
         u = np.dot(kglob_obr, R)
 
         # Get Strains and deforms
-        dex = np.zeros(nel)
-        dez = np.zeros(nel)
-        dexz = np.zeros(nel)
-        dsx = np.zeros(nel)
-        dsz = np.zeros(nel)
-        dtxz = np.zeros(nel)
-        s1 = np.zeros(nel)
-        s3 = np.zeros(nel)
-
         k = 0
         for i in range(1, nw + 1):
             for j in range(1, nh + 1):
@@ -397,25 +365,26 @@ class Application(Frame):
         kzt_new = np.transpose(kz_new)
 
         # Graphics
-        fig = plt.figure()
-        ax = fig.add_subplot()
-        ax.set_title('Mesh')
         ax.plot(kx, -kz, color='blue', linewidth=0.4)
         ax.plot(kxt, -kzt, color='blue', linewidth=0.4)
         for i in range(nh):
             for j in range(nw):
-                ax.plot([kx[i, j], kx[i + 1, j + 1]], [-kz[i + 1, j + 1], -kz[i, j]], color='blue', linewidth=0.4)
+                ax.plot([kx[i+1, j], kx[i, j + 1]], [-kz[i + 1, j], -kz[i, j + 1]], color='blue', linewidth=0.4)
 
         ax.plot(kx_new, -kz_new, color='red', linewidth=0.4)
         ax.plot(kxt_new, -kzt_new, color='red', linewidth=0.4)
+        for i in range(nh):
+            for j in range(nw):
+                ax.plot([kx_new[i + 1, j], kx_new[i, j + 1]], [-kz_new[i + 1, j], -kz_new[i, j + 1]], color='red',
+                        linewidth=0.4)
 
         for i in range(nh + 1):
             for j in range(nw + 1):
                 ax.text(kx[i, j], -kz[i, j], n_nmb[i, j].astype(int), fontsize=5, fontstyle='italic')
-        ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
-        ax.yaxis.set_major_locator(ticker.MultipleLocator(1))
-        plt.gca().set_aspect('equal', adjustable='box')
-        plt.show()
+        ax.xaxis.set_major_locator(ticker.MultipleLocator(0.5))
+        ax.yaxis.set_major_locator(ticker.MultipleLocator(0.5))
+        canvas.draw()
+        canvas.get_tk_widget().place(x=100, y=0)
 
         # Table_creation
         fill = PatternFill(fill_type='solid',
@@ -454,68 +423,75 @@ class Application(Frame):
         ws.sheet_view.zoomScale = 85
 
         # название страницы
-        ws.title = 'Матрица жесткости'
-
-        for i in range(n * 2):
-            for j in range(n * 2):
-                ws.cell(row=i + 1, column=j + 1).value = kglob[i, j]
-                ws.cell(row=i + 1, column=j + 1).alignment = align_center
-                ws.cell(row=i + 1, column=j + 1).border = border
-                ws.cell(row=i + 1, column=j + 1).number_format = '0.00'
-
-        # второй лист
-        ws1 = wb.create_sheet("Элементы")
-        ws1.sheet_view.zoomScale = 85
+        ws.title = "Элементы"
         column = ['№ эл-та', 'sigma_x', 'sigma_z', 'tau_xz', 'sigma_1', 'sigma_3', 'eps_x', 'eps_z', 'eps_xz']
         for i, value in enumerate(column):
-            ws1.cell(row=1, column=i + 1).value = value
-            ws1.cell(row=1, column=i + 1).fill = fill
-            ws1.cell(row=1, column=i + 1).alignment = align_center
-            ws1.cell(row=1, column=i + 1).border = border
+            ws.cell(row=1, column=i + 1).value = value
+            ws.cell(row=1, column=i + 1).fill = fill
+            ws.cell(row=1, column=i + 1).alignment = align_center
+            ws.cell(row=1, column=i + 1).border = border
         for i in range(nel):
-            ws1.cell(row=i + 2, column=1).value = i + 1
-            ws1.cell(row=i + 2, column=1).alignment = align_center
-            ws1.cell(row=i + 2, column=1).border = border
-            ws1.cell(row=i + 2, column=2).value = dsx[i]
-            ws1.cell(row=i + 2, column=2).alignment = align_center
-            ws1.cell(row=i + 2, column=2).border = border
-            ws1.cell(row=i + 2, column=2).number_format = '0.000'
-            ws1.cell(row=i + 2, column=3).value = dsz[i]
-            ws1.cell(row=i + 2, column=3).alignment = align_center
-            ws1.cell(row=i + 2, column=3).border = border
-            ws1.cell(row=i + 2, column=3).number_format = '0.000'
-            ws1.cell(row=i + 2, column=4).value = dtxz[i]
-            ws1.cell(row=i + 2, column=4).alignment = align_center
-            ws1.cell(row=i + 2, column=4).border = border
-            ws1.cell(row=i + 2, column=4).number_format = '0.000'
-            ws1.cell(row=i + 2, column=5).value = s1[i]
-            ws1.cell(row=i + 2, column=5).alignment = align_center
-            ws1.cell(row=i + 2, column=5).border = border
-            ws1.cell(row=i + 2, column=5).number_format = '0.000'
-            ws1.cell(row=i + 2, column=6).value = s3[i]
-            ws1.cell(row=i + 2, column=6).alignment = align_center
-            ws1.cell(row=i + 2, column=6).border = border
-            ws1.cell(row=i + 2, column=6).number_format = '0.000'
-            ws1.cell(row=i + 2, column=7).value = dex[i]
-            ws1.cell(row=i + 2, column=7).alignment = align_center
-            ws1.cell(row=i + 2, column=7).border = border
-            ws1.cell(row=i + 2, column=7).number_format = '0.000'
-            ws1.cell(row=i + 2, column=8).value = dez[i]
-            ws1.cell(row=i + 2, column=8).alignment = align_center
-            ws1.cell(row=i + 2, column=8).border = border
-            ws1.cell(row=i + 2, column=8).number_format = '0.000'
-            ws1.cell(row=i + 2, column=9).value = dexz[i]
-            ws1.cell(row=i + 2, column=9).alignment = align_center
-            ws1.cell(row=i + 2, column=9).border = border
-            ws1.cell(row=i + 2, column=9).number_format = '0.000'
+            ws.cell(row=i + 2, column=1).value = i + 1
+            ws.cell(row=i + 2, column=1).alignment = align_center
+            ws.cell(row=i + 2, column=1).border = border
+            ws.cell(row=i + 2, column=2).value = dsx[i]
+            ws.cell(row=i + 2, column=2).alignment = align_center
+            ws.cell(row=i + 2, column=2).border = border
+            ws.cell(row=i + 2, column=2).number_format = '0.000'
+            ws.cell(row=i + 2, column=3).value = dsz[i]
+            ws.cell(row=i + 2, column=3).alignment = align_center
+            ws.cell(row=i + 2, column=3).border = border
+            ws.cell(row=i + 2, column=3).number_format = '0.000'
+            ws.cell(row=i + 2, column=4).value = dtxz[i]
+            ws.cell(row=i + 2, column=4).alignment = align_center
+            ws.cell(row=i + 2, column=4).border = border
+            ws.cell(row=i + 2, column=4).number_format = '0.000'
+            ws.cell(row=i + 2, column=5).value = s1[i]
+            ws.cell(row=i + 2, column=5).alignment = align_center
+            ws.cell(row=i + 2, column=5).border = border
+            ws.cell(row=i + 2, column=5).number_format = '0.000'
+            ws.cell(row=i + 2, column=6).value = s3[i]
+            ws.cell(row=i + 2, column=6).alignment = align_center
+            ws.cell(row=i + 2, column=6).border = border
+            ws.cell(row=i + 2, column=6).number_format = '0.000'
+            ws.cell(row=i + 2, column=7).value = dex[i]
+            ws.cell(row=i + 2, column=7).alignment = align_center
+            ws.cell(row=i + 2, column=7).border = border
+            ws.cell(row=i + 2, column=7).number_format = '0.000'
+            ws.cell(row=i + 2, column=8).value = dez[i]
+            ws.cell(row=i + 2, column=8).alignment = align_center
+            ws.cell(row=i + 2, column=8).border = border
+            ws.cell(row=i + 2, column=8).number_format = '0.000'
+            ws.cell(row=i + 2, column=9).value = dexz[i]
+            ws.cell(row=i + 2, column=9).alignment = align_center
+            ws.cell(row=i + 2, column=9).border = border
+            ws.cell(row=i + 2, column=9).number_format = '0.000'
+
+        # второй лист
+        """ws1 = wb.create_sheet("Матрица жесткости")
+        ws1.sheet_view.zoomScale = 85
+        for i in range(n * 2):
+            for j in range(n * 2):
+                ws1.cell(row=i + 1, column=j + 1).value = kglob[i, j]
+                ws1.cell(row=i + 1, column=j + 1).alignment = align_center
+                ws1.cell(row=i + 1, column=j + 1).border = border
+                ws1.cell(row=i + 1, column=j + 1).number_format = '0.00'"""
 
         wb.save("Results.xlsx")
 
 
 main_window = Tk()
 main_window.title("FEM elastic plastic")
-main_window.geometry("260x170")
-main_window.resizable(0, 0)
-main_window.attributes("-toolwindow", 0)
+main_window.geometry("800x500")
+fig = Figure()
+ax = fig.add_subplot()
+ax.xaxis.set_major_locator(ticker.MultipleLocator(0.5))
+ax.yaxis.set_major_locator(ticker.MultipleLocator(0.5))
+canvas = FigureCanvasTkAgg(fig, master=main_window)
+canvas.draw()
+toolbar = NavigationToolbar2Tk(canvas, main_window)
+toolbar.update()
+toolbar.place(x=100, y=0)
+canvas.get_tk_widget().place(x=100, y=0)
 app = Application(main_window)
 main_window.mainloop()
