@@ -33,20 +33,49 @@ def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
     return BT
 
 
-def elastic_matrix_element(De, E, nu):
+def elastic_matrix_element(D, E, nu):
     Enu = E / (1 + nu)
-    De[0, 0] = (1 - nu) / (1 - 2 * nu) * Enu
-    De[0, 1] = nu / (1 - 2 * nu) * Enu
-    De[1, 0] = De[0, 1]
-    De[1, 1] = De[0, 0]
-    De[2, 2] = 0.5 * Enu
-    return De
+    D[0, 0] = (1 - nu) / (1 - 2 * nu) * Enu
+    D[0, 1] = nu / (1 - 2 * nu) * Enu
+    D[1, 0] = D[0, 1]
+    D[1, 1] = D[0, 0]
+    D[2, 2] = 0.5 * Enu
+    return D
 
 
-def stiffness_matrix_local(BT, De, B, xi, xj, xm, zi, zj, zm):
+def plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D):
+    if it == 1:
+        sxp = sx[kst - 2, k - 1]
+        szp = sz[kst - 2, k - 1]
+        txzp = txz[kst - 2, k - 1]
+    else:
+        sxp = sx[kst - 1, k - 1]
+        szp = sz[kst - 1, k - 1]
+        txzp = txz[kst - 1, k - 1]
+
+    a0 = szp - sxp
+    a1 = np.sqrt((szp - sxp) ** 2 + 4 * txzp ** 2)
+    p1 = -a0 / a1 - np.sin(fi) / (1 - 2 * nu)
+    p2 = a0 / a1 - np.sin(fi) / (1 - 2 * nu)
+    p3 = 2 * txzp / a1
+    q0 = 2 * (1 + np.sin(fi) ** 2 / (1 - 2 * nu))
+    Enu = E / (1 + nu)
+    D[0, 0] = D[0, 0] - p1 * p1 / q0 * Enu
+    D[0, 1] = D[0, 1] - p1 * p2 / q0 * Enu
+    D[0, 2] = D[0, 2] - p1 * p3 / q0 * Enu
+    D[1, 0] = D[0, 1]
+    D[1, 1] = D[1, 1] - p2 * p2 / q0 * Enu
+    D[1, 2] = D[1, 2] - p2 * p3 / q0 * Enu
+    D[2, 0] = D[0, 2]
+    D[2, 1] = D[1, 2]
+    D[2, 2] = D[2, 2] - p3 * p3 / q0 * Enu
+    return D
+
+
+def stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm):
     dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
     dlt = np.abs(dlt) / 2
-    BTD = np.dot(BT, De)
+    BTD = np.dot(BT, D)
     BTDB = np.dot(BTD, B)
     kloc = BTDB * dlt
     return kloc
@@ -71,18 +100,18 @@ def stiffness_matrix_total(kglob, ki, kj, kloc, km):
     return kglob
 
 
-def strains(u, B, ki, kj, km, k, dex, dez, dexz):
-    dex[k - 1] = (u[2 * ki - 2] * B[0, 0] + u[2 * kj - 2] * B[0, 2] + u[2 * km - 2] * B[0, 4])
-    dez[k - 1] = (u[2 * ki - 1] * B[1, 1] + u[2 * kj - 1] * B[1, 3] + u[2 * km - 1] * B[1, 5])
-    dexz[k - 1] = (u[2 * ki - 2] * B[2, 0] + u[2 * kj - 2] * B[2, 2] + u[2 * km - 2] * B[2, 4]
-                   + u[2 * ki - 1] * B[2, 1] + u[2 * kj - 1] * B[2, 3] + u[2 * km - 1] * B[2, 5])
+def strains(du, B, ki, kj, km, k, dex, dez, dexz):
+    dex[k - 1] = (du[2 * ki - 2] * B[0, 0] + du[2 * kj - 2] * B[0, 2] + du[2 * km - 2] * B[0, 4])
+    dez[k - 1] = (du[2 * ki - 1] * B[1, 1] + du[2 * kj - 1] * B[1, 3] + du[2 * km - 1] * B[1, 5])
+    dexz[k - 1] = (du[2 * ki - 2] * B[2, 0] + du[2 * kj - 2] * B[2, 2] + du[2 * km - 2] * B[2, 4]
+                   + du[2 * ki - 1] * B[2, 1] + du[2 * kj - 1] * B[2, 3] + du[2 * km - 1] * B[2, 5])
     return dex, dez, dexz
 
 
-def stresses(De, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3):
-    dsx[k - 1] = De[0, 0] * dex[k - 1] + De[0, 1] * dez[k - 1] + De[0, 2] * dexz[k - 1]
-    dsz[k - 1] = De[1, 0] * dex[k - 1] + De[1, 1] * dez[k - 1] + De[1, 2] * dexz[k - 1]
-    dtxz[k - 1] = De[2, 0] * dex[k - 1] + De[2, 1] * dez[k - 1] + De[2, 2] * dexz[k - 1]
+def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3):
+    dsx[k - 1] = D[0, 0] * dex[k - 1] + D[0, 1] * dez[k - 1] + D[0, 2] * dexz[k - 1]
+    dsz[k - 1] = D[1, 0] * dex[k - 1] + D[1, 1] * dez[k - 1] + D[1, 2] * dexz[k - 1]
+    dtxz[k - 1] = D[2, 0] * dex[k - 1] + D[2, 1] * dez[k - 1] + D[2, 2] * dexz[k - 1]
 
     s1[k - 1] = (dsx[k - 1] + dsz[k - 1]) / 2 + np.sqrt((dsx[k - 1] - dsz[k - 1])
                                                         ** 2 / 4 + dtxz[k - 1] ** 2)
@@ -94,6 +123,7 @@ def stresses(De, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3):
 class Application(Frame):
     def __init__(self, master):
         super(Application, self).__init__(master)
+        self.radioValue = IntVar()
         self.grid()
         self.create_widgets()
 
@@ -171,8 +201,21 @@ class Application(Frame):
         self.nb_ent.grid(row=10, column=1)
         self.nb_ent.insert(0, "12")
 
+        # Number_of_steps
+        Label(self, text="n =").grid(row=11, column=0)
+        self.nst_ent = Entry(self, width=5, justify=CENTER)
+        self.nst_ent.grid(row=11, column=1)
+        self.nst_ent.insert(0, "10")
+
         # Btn_count
-        Button(self, text="Решить", command=self.solver).grid(row=11, column=0, columnspan=3)
+        Button(self, text="Решить", command=self.solver).grid(row=14, column=0, columnspan=3)
+
+        # Plastic
+        one = Radiobutton(self, text='El-pl', variable=self.radioValue, value=1)
+        one.grid(column=0, row=12, sticky="W")
+        # Elastic
+        two = Radiobutton(self, text='El', variable=self.radioValue, value=0)
+        two.grid(column=0, row=13, sticky="W")
 
     def input(self):
         E = float(self.E_ent.get())
@@ -186,10 +229,15 @@ class Application(Frame):
         nw = int(self.nw_ent.get())
         nh = int(self.nh_ent.get())
         nb = int(self.nb_ent.get())
-        return E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi
+        nst = int(self.nst_ent.get())
+        plastic = self.radioValue.get()
+
+        return E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi, nst, plastic
 
     def solver(self):
-        E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi = self.input()
+        E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi, nst, plastic = self.input()
+        if plastic == 0:
+            nst = 1
         # Mesh create
         b = b / 2
         # Nodes number
@@ -197,14 +245,12 @@ class Application(Frame):
         # Elements number
         nel = nw * nh * 2
         fi = fi * np.pi / 180
+        "niter = 20"
         # Matrices create
         kx = np.zeros((nh + 1, nw + 1))
         kz = np.zeros((nh + 1, nw + 1))
         B = np.zeros((3, 6))
-        De = np.zeros((3, 3))
-        kglob = np.zeros((n * 2, n * 2))
-        R = np.zeros(n * 2)
-        u = np.zeros(n * 2)
+        D = np.zeros((3, 3))
         n_nmb = np.zeros((nh + 1, nw + 1))
         dex = np.zeros(nel)
         dez = np.zeros(nel)
@@ -212,6 +258,9 @@ class Application(Frame):
         dsx = np.zeros(nel)
         dsz = np.zeros(nel)
         dtxz = np.zeros(nel)
+        sx = np.zeros((nst, nel))
+        sz = np.zeros((nst, nel))
+        txz = np.zeros((nst, nel))
         s1 = np.zeros(nel)
         s3 = np.zeros(nel)
         pl = np.zeros(nel)
@@ -242,7 +291,24 @@ class Application(Frame):
                 n_nmb[j, i] = number
                 number += 1
 
+        # At_start_all_elements_works_elastic
+        for i in range(nel):
+            pl[i] = 0
 
+        dp = p_load / nst
+        kst = 0
+        kst = kst + 1
+
+        # Displacements_and_stresses_are_zero
+        dR = np.zeros(n * 2)
+        du = np.zeros(n * 2)
+
+        # starting_iterations
+        it = 0
+        it = it + 1
+
+        # Global_stiffness_matrix_is_zero
+        kglob = np.zeros((n * 2, n * 2))
 
         # Stiffness matrix
         k = 0
@@ -261,8 +327,10 @@ class Application(Frame):
                 zj = kz[j, i - 1]
                 zm = kz[j - 1, i]
                 BT = geometry_matrix_element(B, xi, xj, xm, zi, zj, zm)
-                De = elastic_matrix_element(De, E, nu)
-                kloc = stiffness_matrix_local(BT, De, B, xi, xj, xm, zi, zj, zm)
+                D = elastic_matrix_element(D, E, nu)
+                if pl[k - 1] == 1:
+                    D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
+                kloc = stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm)
                 kglob = stiffness_matrix_total(kglob, ki, kj, kloc, km)
 
                 k = k + 1
@@ -278,36 +346,33 @@ class Application(Frame):
                 zj = kz[j - 1, i]
                 zm = kz[j, i]
                 BT = geometry_matrix_element(B, xi, xj, xm, zi, zj, zm)
-                De = elastic_matrix_element(De, E, nu)
-                kloc = stiffness_matrix_local(BT, De, B, xi, xj, xm, zi, zj, zm)
+                D = elastic_matrix_element(D, E, nu)
+                if pl[k - 1] == 1:
+                    D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
+                kloc = stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm)
                 kglob = stiffness_matrix_total(kglob, ki, kj, kloc, km)
 
         # Boundary conditions
         for i in range(1, nb + 2):
             j = ((i - 1) * nh + i) * 2
+            dR[j - 1] = dp * b / nb
             if i == 1 or i == nb + 1:
-                R[j - 1] = 0.5 * p_load * b / nb
-            else:
-                R[j - 1] = p_load * b / nb
+                dR[j - 1] = 0.5 * dp * b / nb
 
         for i in range(1, nh + 2):
             j = i * 2
-            u[j - 2] = 0
             kglob[j - 2, j - 2] = 10 ** 16
             j = (n - i + 1) * 2
-            u[j - 2] = 0
-            u[j - 1] = 0
             kglob[j - 1, j - 1] = 10 ** 16
             kglob[j - 2, j - 2] = 10 ** 16
 
         for i in range(nh + 1, n, nh + 1):
             j = i * 2
-            u[j - 1] = 0
             kglob[j - 1, j - 1] = 10 ** 16
 
         # Solve SOLE
         kglob_obr = np.linalg.inv(kglob)
-        u = np.dot(kglob_obr, R)
+        du = np.dot(kglob_obr, dR)
 
         # Get Strains and deforms
         k = 0
@@ -318,46 +383,46 @@ class Application(Frame):
                 ki = l
                 kj = l + 1
                 km = l + nh + 1
-                # Stiffness_matrix_element
                 xi = kx[j - 1, i - 1]
                 xj = kx[j, i - 1]
                 xm = kx[j - 1, i]
                 zi = kz[j - 1, i - 1]
                 zj = kz[j, i - 1]
                 zm = kz[j - 1, i]
-
                 B = np.transpose(geometry_matrix_element(B, xi, xj, xm, zi, zj, zm))
-                De = elastic_matrix_element(De, E, nu)
-                dex, dez, dexz = strains(u, B, ki, kj, km, k, dex, dez, dexz)
-                dsx, dsz, dtxz, s1, s3 = stresses(De, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3)
+                D = elastic_matrix_element(D, E, nu)
+                if pl[k - 1] == 1:
+                    D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
+                dex, dez, dexz = strains(du, B, ki, kj, km, k, dex, dez, dexz)
+                dsx, dsz, dtxz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3)
 
                 k = k + 1
                 m = (k + 2) // 2 + i - 1
                 ki = m
                 kj = m + nh
                 km = m + nh + 1
-                # Stiffness_matrix_element
                 xi = kx[j, i - 1]
                 xj = kx[j - 1, i]
                 xm = kx[j, i]
                 zi = kz[j, i - 1]
                 zj = kz[j - 1, i]
                 zm = kz[j, i]
-
                 B = np.transpose(geometry_matrix_element(B, xi, xj, xm, zi, zj, zm))
-                De = elastic_matrix_element(De, E, nu)
-                dex, dez, dexz = strains(u, B, ki, kj, km, k, dex, dez, dexz)
-                dsx, dsz, dtxz, s1, s3 = stresses(De, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3)
+                D = elastic_matrix_element(D, E, nu)
+                if pl[k - 1] == 1:
+                    D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
+                dex, dez, dexz = strains(du, B, ki, kj, km, k, dex, dez, dexz)
+                dsx, dsz, dtxz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3)
 
         u_new = np.zeros(n)
         for i, j in zip(range(0, n * 2, 2), range(n + 1)):
-            u_new[j] = u[i]
+            u_new[j] = du[i]
         u_new = np.transpose(np.reshape(u_new, (nw + 1, nh + 1)))
         kx_new = kx + u_new
 
         w_new = np.zeros(n)
         for i, j in zip(range(1, n * 2 + 1, 2), range(n + 1)):
-            w_new[j] = u[i]
+            w_new[j] = du[i]
         w_new = np.transpose(np.reshape(w_new, (nw + 1, nh + 1)))
         kz_new = kz + w_new
 
@@ -369,7 +434,7 @@ class Application(Frame):
         ax.plot(kxt, -kzt, color='blue', linewidth=0.4)
         for i in range(nh):
             for j in range(nw):
-                ax.plot([kx[i+1, j], kx[i, j + 1]], [-kz[i + 1, j], -kz[i, j + 1]], color='blue', linewidth=0.4)
+                ax.plot([kx[i + 1, j], kx[i, j + 1]], [-kz[i + 1, j], -kz[i, j + 1]], color='blue', linewidth=0.4)
 
         ax.plot(kx_new, -kz_new, color='red', linewidth=0.4)
         ax.plot(kxt_new, -kzt_new, color='red', linewidth=0.4)
