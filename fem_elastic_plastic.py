@@ -11,9 +11,6 @@ from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationTool
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Border, Side, Alignment
 
-"""def funcplast(fi, c):
-    funcplast = np.sqrt((szFp - sxFp) ** 2 + 4 * txzFp ** 2) - ((szFp + sxFp) * np.sin(fi) + 2 * c * np.cos(fi))"""
-
 
 def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
     dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
@@ -100,24 +97,110 @@ def stiffness_matrix_total(kglob, ki, kj, kloc, km):
     return kglob
 
 
-def strains(du, B, ki, kj, km, k, dex, dez, dexz):
+def strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz):
     dex[k - 1] = (du[2 * ki - 2] * B[0, 0] + du[2 * kj - 2] * B[0, 2] + du[2 * km - 2] * B[0, 4])
     dez[k - 1] = (du[2 * ki - 1] * B[1, 1] + du[2 * kj - 1] * B[1, 3] + du[2 * km - 1] * B[1, 5])
     dexz[k - 1] = (du[2 * ki - 2] * B[2, 0] + du[2 * kj - 2] * B[2, 2] + du[2 * km - 2] * B[2, 4]
                    + du[2 * ki - 1] * B[2, 1] + du[2 * kj - 1] * B[2, 3] + du[2 * km - 1] * B[2, 5])
+    if kst == 1:
+        ex[kst - 1, k - 1] = dex[k - 1]
+        ez[kst - 1, k - 1] = dez[k - 1]
+        exz[kst - 1, k - 1] = dexz[k - 1]
+    else:
+        ex[kst - 1, k - 1] = ex[kst - 2, k - 1] + dex[k - 1]
+        ez[kst - 1, k - 1] = ez[kst - 2, k - 1] + dez[k - 1]
+        exz[kst - 1, k - 1] = exz[kst - 2, k - 1] + dexz[k - 1]
     return dex, dez, dexz
 
 
-def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3):
+def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz):
     dsx[k - 1] = D[0, 0] * dex[k - 1] + D[0, 1] * dez[k - 1] + D[0, 2] * dexz[k - 1]
     dsz[k - 1] = D[1, 0] * dex[k - 1] + D[1, 1] * dez[k - 1] + D[1, 2] * dexz[k - 1]
     dtxz[k - 1] = D[2, 0] * dex[k - 1] + D[2, 1] * dez[k - 1] + D[2, 2] * dexz[k - 1]
+    if kst == 1:
+        sx[kst - 1, k - 1] = dsx[k - 1]
+        sz[kst - 1, k - 1] = dsz[k - 1]
+        txz[kst - 1, k - 1] = dtxz[k - 1]
+    else:
+        sx[kst - 1, k - 1] = sx[kst - 2, k - 1] + dsx[k - 1]
+        sz[kst - 1, k - 1] = sz[kst - 2, k - 1] + dsz[k - 1]
+        txz[kst - 1, k - 1] = txz[kst - 2, k - 1] + dtxz[k - 1]
 
     s1[k - 1] = (dsx[k - 1] + dsz[k - 1]) / 2 + np.sqrt((dsx[k - 1] - dsz[k - 1])
                                                         ** 2 / 4 + dtxz[k - 1] ** 2)
     s3[k - 1] = (dsx[k - 1] + dsz[k - 1]) / 2 - np.sqrt((dsx[k - 1] - dsz[k - 1])
                                                         ** 2 / 4 + dtxz[k - 1] ** 2)
     return dsx, dsz, dtxz, s1, s3
+
+
+def funcplast(sxFp, szFp, txzFp, fi, c):
+    return np.sqrt((szFp - sxFp) ** 2 + 4 * txzFp ** 2) - ((szFp + sxFp) * np.sin(fi) + 2 * c * np.cos(fi))
+
+
+def function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu, xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR,
+                     dex, dez, dexz, ex, ez, exz):
+    Fpst = funcplast(sx[kst - 1, k - 1], sz[kst - 1, k - 1], txz[kst - 1, k - 1], fi, c)
+    Fp[kst - 1, k - 1] = Fpst
+    FF[kst - 1, k - 1, it - 1] = Fpst
+    if Fpst < 0:
+        return
+    if pl[k - 1] == 1:
+        return
+    pl[k - 1] = 1
+    npl[kst - 1, it - 1] = npl[kst - 1, it - 1] + 1
+    for kFst in np.arange(0, 1.02, 0.02):
+        sxF = sx[kst - 2, k - 1] + kFst * (sx[kst - 1, k - 1] - sx[kst - 2, k - 1])
+        szF = sz[kst - 2, k - 1] + kFst * (sz[kst - 1, k - 1] - sz[kst - 2, k - 1])
+        txzF = txz[kst - 2, k - 1] + kFst * (txz[kst - 1, k - 1] - txz[kst - 2, k - 1])
+        Fpst = funcplast(sxF, szF, txzF, fi, c)
+        if Fpst > 0:
+            sx[kst - 1, k - 1] = sxF
+            sz[kst - 1, k - 1] = szF
+            txz[kst - 1, k - 1] = txzF
+            Fp[kst - 1, k - 1] = Fpst
+            FF[kst - 1, k - 1, it - 1] = Fpst
+    a0 = szF - sxF
+    a1 = np.sqrt((szF - sxF) ** 2 + 4 * txzF ** 2)
+    p1 = -a0 / a1 - np.sin(fi) / (1 - 2 * nu)
+    p2 = a0 / a1 - np.sin(fi) / (1 - 2 * nu)
+    p3 = 2 * txzF / a1
+    f1 = -a0 / a1 - np.sin(fi)
+    f2 = a0 / a1 - np.sin(fi)
+    f3 = 4 * txzF / a1
+    q0 = 2 * (1 + np.sin(fi) ** 2 / (1 - 2 * nu))
+    a6 = f1 * (sxF - sx[kst - 2, k - 1]) + f2 * (szF - sz[kst - 2, k - 1]) + f3 * (txzF - txz[kst - 2, k - 1])
+    a1 = p1 * a6 / q0
+    a2 = p2 * a6 / q0
+    a3 = p3 * a6 / q0
+
+    dlt = np.abs(xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)) / 2
+
+    dR[2 * ki - 2] = dR[2 * ki - 2] - dlt * (a1 * B[0, 0] + a3 * B[2, 0])
+    dR[2 * ki - 1] = dR[2 * ki - 1] - dlt * (a2 * B[1, 1] + a3 * B[2, 1])
+    dR[2 * kj - 2] = dR[2 * kj - 2] - dlt * (a1 * B[0, 2] + a3 * B[2, 2])
+    dR[2 * kj - 1] = dR[2 * kj - 1] - dlt * (a2 * B[1, 3] + a3 * B[2, 3])
+    dR[2 * km - 2] = dR[2 * km - 2] - dlt * (a1 * B[0, 4] + a3 * B[2, 4])
+    dR[2 * km - 1] = dR[2 * km - 1] - dlt * (a2 * B[1, 5] + a3 * B[2, 5])
+
+    sx[kst - 1, k - 1] = sx[kst - 2, k - 1] + a1
+    sz[kst - 1, k - 1] = sz[kst - 2, k - 1] + a2
+    txz[kst - 1, k - 1] = txz[kst - 2, k - 1] + a3
+
+    Fpst = funcplast(sx[kst - 1, k - 1], sz[kst - 1, k - 1], txz[kst - 1, k - 1], fi, c)
+    Fp[kst - 1, k - 1] = Fpst
+    FF[kst - 1, k - 1, it - 1] = Fpst
+
+    Enu = E / (1 + nu)
+    dex[k - 1] = (a1 * (1 - nu) - a2 * nu) / Enu
+    dez[k - 1] = (a2 * (1 - nu) - a1 * nu) / Enu
+    dexz[k - 1] = 2 * a3 / Enu
+    ex[kst - 1, k - 1] = ex[kst - 2, k - 1] + dex[k - 1]
+    ez[kst - 1, k - 1] = ez[kst - 2, k - 1] + dez[k - 1]
+    exz[kst - 1, k - 1] = exz[kst - 2, k - 1] + dexz[k - 1]
+
+
+
+
 
 
 class Application(Frame):
@@ -205,7 +288,7 @@ class Application(Frame):
         Label(self, text="n =").grid(row=11, column=0)
         self.nst_ent = Entry(self, width=5, justify=CENTER)
         self.nst_ent.grid(row=11, column=1)
-        self.nst_ent.insert(0, "10")
+        self.nst_ent.insert(0, "20")
 
         # Btn_count
         Button(self, text="Решить", command=self.solver).grid(row=14, column=0, columnspan=3)
@@ -245,7 +328,7 @@ class Application(Frame):
         # Elements number
         nel = nw * nh * 2
         fi = fi * np.pi / 180
-        "niter = 20"
+        niter = 20
         # Matrices create
         kx = np.zeros((nh + 1, nw + 1))
         kz = np.zeros((nh + 1, nw + 1))
@@ -255,6 +338,9 @@ class Application(Frame):
         dex = np.zeros(nel)
         dez = np.zeros(nel)
         dexz = np.zeros(nel)
+        ex = np.zeros((nst, nel))
+        ez = np.zeros((nst, nel))
+        exz = np.zeros((nst, nel))
         dsx = np.zeros(nel)
         dsz = np.zeros(nel)
         dtxz = np.zeros(nel)
@@ -264,6 +350,10 @@ class Application(Frame):
         s1 = np.zeros(nel)
         s3 = np.zeros(nel)
         pl = np.zeros(nel)
+        Fp = np.zeros((nst, nel))
+        FF = np.zeros((nst, nel, niter))
+        npl = np.zeros((nst, niter))
+
 
         xk = 0
         zk = 0
@@ -393,8 +483,8 @@ class Application(Frame):
                 D = elastic_matrix_element(D, E, nu)
                 if pl[k - 1] == 1:
                     D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
-                dex, dez, dexz = strains(du, B, ki, kj, km, k, dex, dez, dexz)
-                dsx, dsz, dtxz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3)
+                dex, dez, dexz = strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz)
+                dsx, dsz, dtxz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz)
 
                 k = k + 1
                 m = (k + 2) // 2 + i - 1
@@ -411,8 +501,8 @@ class Application(Frame):
                 D = elastic_matrix_element(D, E, nu)
                 if pl[k - 1] == 1:
                     D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
-                dex, dez, dexz = strains(du, B, ki, kj, km, k, dex, dez, dexz)
-                dsx, dsz, dtxz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3)
+                dex, dez, dexz = strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz)
+                dsx, dsz, dtxz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz)
 
         u_new = np.zeros(n)
         for i, j in zip(range(0, n * 2, 2), range(n + 1)):
@@ -556,7 +646,7 @@ canvas = FigureCanvasTkAgg(fig, master=main_window)
 canvas.draw()
 toolbar = NavigationToolbar2Tk(canvas, main_window)
 toolbar.update()
-toolbar.place(x=100, y=0)
+toolbar.place(x=110, y=0)
 canvas.get_tk_widget().place(x=100, y=0)
 app = Application(main_window)
 main_window.mainloop()
