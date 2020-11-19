@@ -40,7 +40,9 @@ def elastic_matrix_element(D, E, nu):
     return D
 
 
-def plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D):
+def plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl):
+    if pl[k - 1] == 0:
+        return D
     if it == 1:
         sxp = sx[kst - 2, k - 1]
         szp = sz[kst - 2, k - 1]
@@ -110,7 +112,7 @@ def strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz):
         ex[kst - 1, k - 1] = ex[kst - 2, k - 1] + dex[k - 1]
         ez[kst - 1, k - 1] = ez[kst - 2, k - 1] + dez[k - 1]
         exz[kst - 1, k - 1] = exz[kst - 2, k - 1] + dexz[k - 1]
-    return dex, dez, dexz
+    return dex, dez, dexz, ex, ez, exz
 
 
 def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz):
@@ -126,11 +128,13 @@ def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz):
         sz[kst - 1, k - 1] = sz[kst - 2, k - 1] + dsz[k - 1]
         txz[kst - 1, k - 1] = txz[kst - 2, k - 1] + dtxz[k - 1]
 
-    s1[k - 1] = (dsx[k - 1] + dsz[k - 1]) / 2 + np.sqrt((dsx[k - 1] - dsz[k - 1])
-                                                        ** 2 / 4 + dtxz[k - 1] ** 2)
-    s3[k - 1] = (dsx[k - 1] + dsz[k - 1]) / 2 - np.sqrt((dsx[k - 1] - dsz[k - 1])
-                                                        ** 2 / 4 + dtxz[k - 1] ** 2)
-    return dsx, dsz, dtxz, s1, s3
+    s1[kst - 1, k - 1] = (sx[kst - 1, k - 1] + sz[kst - 1, k - 1]) / 2 + np.sqrt((sx[kst - 1, k - 1]
+                                                                                  - sz[kst - 1, k - 1]) ** 2 / 4
+                                                                                 + txz[kst - 1, k - 1] ** 2)
+    s3[kst - 1, k - 1] = (sx[kst - 1, k - 1] + sz[kst - 1, k - 1]) / 2 - np.sqrt((sx[kst - 1, k - 1]
+                                                                                  - sz[kst - 1, k - 1]) ** 2 / 4
+                                                                                 + txz[kst - 1, k - 1] ** 2)
+    return sx, sz, txz, s1, s3
 
 
 def funcplast(sxFp, szFp, txzFp, fi, c):
@@ -138,14 +142,16 @@ def funcplast(sxFp, szFp, txzFp, fi, c):
 
 
 def function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu, xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR,
-                     dex, dez, dexz, ex, ez, exz):
+                     dex, dez, dexz, ex, ez, exz, E, plastic):
+    if plastic == 0:
+        return sx, sz, txz, ex, ez, exz, dR
     Fpst = funcplast(sx[kst - 1, k - 1], sz[kst - 1, k - 1], txz[kst - 1, k - 1], fi, c)
     Fp[kst - 1, k - 1] = Fpst
     FF[kst - 1, k - 1, it - 1] = Fpst
     if Fpst < 0:
-        return
+        return sx, sz, txz, ex, ez, exz, dR
     if pl[k - 1] == 1:
-        return
+        return sx, sz, txz, ex, ez, exz, dR
     pl[k - 1] = 1
     npl[kst - 1, it - 1] = npl[kst - 1, it - 1] + 1
     for kFst in np.arange(0, 1.02, 0.02):
@@ -197,10 +203,7 @@ def function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu, xi, xj
     ex[kst - 1, k - 1] = ex[kst - 2, k - 1] + dex[k - 1]
     ez[kst - 1, k - 1] = ez[kst - 2, k - 1] + dez[k - 1]
     exz[kst - 1, k - 1] = exz[kst - 2, k - 1] + dexz[k - 1]
-
-
-
-
+    return sx, sz, txz, ex, ez, exz, dR
 
 
 class Application(Frame):
@@ -288,7 +291,7 @@ class Application(Frame):
         Label(self, text="n =").grid(row=11, column=0)
         self.nst_ent = Entry(self, width=5, justify=CENTER)
         self.nst_ent.grid(row=11, column=1)
-        self.nst_ent.insert(0, "20")
+        self.nst_ent.insert(0, "10")
 
         # Btn_count
         Button(self, text="Решить", command=self.solver).grid(row=14, column=0, columnspan=3)
@@ -347,13 +350,12 @@ class Application(Frame):
         sx = np.zeros((nst, nel))
         sz = np.zeros((nst, nel))
         txz = np.zeros((nst, nel))
-        s1 = np.zeros(nel)
-        s3 = np.zeros(nel)
+        s1 = np.zeros((nst, nel))
+        s3 = np.zeros((nst, nel))
         pl = np.zeros(nel)
         Fp = np.zeros((nst, nel))
         FF = np.zeros((nst, nel, niter))
         npl = np.zeros((nst, niter))
-
 
         xk = 0
         zk = 0
@@ -391,7 +393,6 @@ class Application(Frame):
 
         # Displacements_and_stresses_are_zero
         dR = np.zeros(n * 2)
-        du = np.zeros(n * 2)
 
         # starting_iterations
         it = 0
@@ -418,8 +419,7 @@ class Application(Frame):
                 zm = kz[j - 1, i]
                 BT = geometry_matrix_element(B, xi, xj, xm, zi, zj, zm)
                 D = elastic_matrix_element(D, E, nu)
-                if pl[k - 1] == 1:
-                    D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
+                D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl)
                 kloc = stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm)
                 kglob = stiffness_matrix_total(kglob, ki, kj, kloc, km)
 
@@ -437,8 +437,7 @@ class Application(Frame):
                 zm = kz[j, i]
                 BT = geometry_matrix_element(B, xi, xj, xm, zi, zj, zm)
                 D = elastic_matrix_element(D, E, nu)
-                if pl[k - 1] == 1:
-                    D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
+                D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl)
                 kloc = stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm)
                 kglob = stiffness_matrix_total(kglob, ki, kj, kloc, km)
 
@@ -481,10 +480,12 @@ class Application(Frame):
                 zm = kz[j - 1, i]
                 B = np.transpose(geometry_matrix_element(B, xi, xj, xm, zi, zj, zm))
                 D = elastic_matrix_element(D, E, nu)
-                if pl[k - 1] == 1:
-                    D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
-                dex, dez, dexz = strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz)
-                dsx, dsz, dtxz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz)
+                D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl)
+                dex, dez, dexz, ex, ez, exz = strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz)
+                sx, sz, txz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz)
+                sx, sz, txz, ex, ez, exz, dR = function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu,
+                                                                xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR, dex, dez,
+                                                                dexz, ex, ez, exz, E, plastic)
 
                 k = k + 1
                 m = (k + 2) // 2 + i - 1
@@ -499,10 +500,12 @@ class Application(Frame):
                 zm = kz[j, i]
                 B = np.transpose(geometry_matrix_element(B, xi, xj, xm, zi, zj, zm))
                 D = elastic_matrix_element(D, E, nu)
-                if pl[k - 1] == 1:
-                    D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D)
-                dex, dez, dexz = strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz)
-                dsx, dsz, dtxz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz)
+                D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl)
+                dex, dez, dexz, ex, ez, exz = strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz)
+                sx, sz, txz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz)
+                sx, sz, txz, ex, ez, exz, dR = function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu,
+                                                                xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR, dex, dez,
+                                                                dexz, ex, ez, exz, E, plastic)
 
         u_new = np.zeros(n)
         for i, j in zip(range(0, n * 2, 2), range(n + 1)):
@@ -520,6 +523,7 @@ class Application(Frame):
         kzt_new = np.transpose(kz_new)
 
         # Graphics
+        ax.clear()
         ax.plot(kx, -kz, color='blue', linewidth=0.4)
         ax.plot(kxt, -kzt, color='blue', linewidth=0.4)
         for i in range(nh):
@@ -589,35 +593,35 @@ class Application(Frame):
             ws.cell(row=i + 2, column=1).value = i + 1
             ws.cell(row=i + 2, column=1).alignment = align_center
             ws.cell(row=i + 2, column=1).border = border
-            ws.cell(row=i + 2, column=2).value = dsx[i]
+            ws.cell(row=i + 2, column=2).value = sx[kst - 1, i]
             ws.cell(row=i + 2, column=2).alignment = align_center
             ws.cell(row=i + 2, column=2).border = border
             ws.cell(row=i + 2, column=2).number_format = '0.000'
-            ws.cell(row=i + 2, column=3).value = dsz[i]
+            ws.cell(row=i + 2, column=3).value = sz[kst - 1, i]
             ws.cell(row=i + 2, column=3).alignment = align_center
             ws.cell(row=i + 2, column=3).border = border
             ws.cell(row=i + 2, column=3).number_format = '0.000'
-            ws.cell(row=i + 2, column=4).value = dtxz[i]
+            ws.cell(row=i + 2, column=4).value = txz[kst - 1, i]
             ws.cell(row=i + 2, column=4).alignment = align_center
             ws.cell(row=i + 2, column=4).border = border
             ws.cell(row=i + 2, column=4).number_format = '0.000'
-            ws.cell(row=i + 2, column=5).value = s1[i]
+            ws.cell(row=i + 2, column=5).value = s1[kst - 1, i]
             ws.cell(row=i + 2, column=5).alignment = align_center
             ws.cell(row=i + 2, column=5).border = border
             ws.cell(row=i + 2, column=5).number_format = '0.000'
-            ws.cell(row=i + 2, column=6).value = s3[i]
+            ws.cell(row=i + 2, column=6).value = s3[kst - 1, i]
             ws.cell(row=i + 2, column=6).alignment = align_center
             ws.cell(row=i + 2, column=6).border = border
             ws.cell(row=i + 2, column=6).number_format = '0.000'
-            ws.cell(row=i + 2, column=7).value = dex[i]
+            ws.cell(row=i + 2, column=7).value = ex[kst - 1, i]
             ws.cell(row=i + 2, column=7).alignment = align_center
             ws.cell(row=i + 2, column=7).border = border
             ws.cell(row=i + 2, column=7).number_format = '0.000'
-            ws.cell(row=i + 2, column=8).value = dez[i]
+            ws.cell(row=i + 2, column=8).value = ez[kst - 1, i]
             ws.cell(row=i + 2, column=8).alignment = align_center
             ws.cell(row=i + 2, column=8).border = border
             ws.cell(row=i + 2, column=8).number_format = '0.000'
-            ws.cell(row=i + 2, column=9).value = dexz[i]
+            ws.cell(row=i + 2, column=9).value = exz[kst - 1, i]
             ws.cell(row=i + 2, column=9).alignment = align_center
             ws.cell(row=i + 2, column=9).border = border
             ws.cell(row=i + 2, column=9).number_format = '0.000'
