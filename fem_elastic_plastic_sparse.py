@@ -1,5 +1,7 @@
 # FEM
 import numpy as np
+from scipy.sparse import csc_matrix
+from scipy.sparse.linalg import inv
 
 # создание окна
 from tkinter import *
@@ -462,7 +464,8 @@ class Application(Frame):
                     kglob[j - 1, j - 1] = 10 ** 16
 
                 # Solve SOLE
-                du = np.dot(np.linalg.inv(kglob), dR)
+                
+                du = inv(csc_matrix(kglob)).dot(dR)
 
                 # Get Strains and deforms
                 k = 0
@@ -648,7 +651,6 @@ class Application(Frame):
                 ws1.cell(row=i + 1, column=j + 1).alignment = align_center
                 ws1.cell(row=i + 1, column=j + 1).border = border
                 ws1.cell(row=i + 1, column=j + 1).number_format = '0.00'
-
         wb.save("Results.xlsx")
 
 

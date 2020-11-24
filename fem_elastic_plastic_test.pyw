@@ -1,5 +1,6 @@
 # FEM
 import numpy as np
+from numba import njit
 
 # создание окна
 from tkinter import *
@@ -29,7 +30,7 @@ def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
     BT = np.transpose(B)
     return BT
 
-
+@njit(cache=True)
 def elastic_matrix_element(D, E, nu):
     Enu = E / (1 + nu)
     D[0, 0] = (1 - nu) / (1 - 2 * nu) * Enu
@@ -43,7 +44,7 @@ def elastic_matrix_element(D, E, nu):
     D[2, 2] = 0.5 * Enu
     return D
 
-
+@njit(cache=True)
 def plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl, E):
     if pl[k - 1] == 0:
         return D
@@ -74,7 +75,7 @@ def plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl, E):
     D[2, 2] = D[2, 2] - p3 * p3 / q0 * Enu
     return D
 
-
+@njit(cache=True)
 def stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm):
     dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
     dlt = np.abs(dlt) / 2
@@ -83,7 +84,7 @@ def stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm):
     kloc = BTDB * dlt
     return kloc
 
-
+@njit(cache=True)
 def stiffness_matrix_total(kglob, ki, kj, kloc, km):
     for i1 in range(0, 6):
         if 0 <= i1 <= 1:
@@ -102,7 +103,7 @@ def stiffness_matrix_total(kglob, ki, kj, kloc, km):
             kglob[nk1, nk2] = kglob[nk1, nk2] + kloc[i1, j1]
     return kglob
 
-
+@njit(cache=True)
 def strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz):
     dex[k - 1] = (du[2 * ki - 2] * B[0, 0] + du[2 * kj - 2] * B[0, 2] + du[2 * km - 2] * B[0, 4])
     dez[k - 1] = (du[2 * ki - 1] * B[1, 1] + du[2 * kj - 1] * B[1, 3] + du[2 * km - 1] * B[1, 5])
@@ -118,7 +119,7 @@ def strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz):
         exz[kst - 1, k - 1] = exz[kst - 2, k - 1] + dexz[k - 1]
     return dex, dez, dexz, ex, ez, exz
 
-
+@njit(cache=True)
 def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz):
     dsx[k - 1] = D[0, 0] * dex[k - 1] + D[0, 1] * dez[k - 1] + D[0, 2] * dexz[k - 1]
     dsz[k - 1] = D[1, 0] * dex[k - 1] + D[1, 1] * dez[k - 1] + D[1, 2] * dexz[k - 1]
@@ -140,7 +141,7 @@ def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz):
                                                                                  + txz[kst - 1, k - 1] ** 2)
     return sx, sz, txz, s1, s3
 
-
+@njit(cache=True)
 def funcplast(sxFp, szFp, txzFp, fi, c):
     return np.sqrt((szFp - sxFp) ** 2 + 4 * txzFp ** 2) - ((szFp + sxFp) * np.sin(fi) + 2 * c * np.cos(fi))
 
@@ -209,6 +210,8 @@ def function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu, xi, xj
     ez[kst - 1, k - 1] = ez[kst - 2, k - 1] + dez[k - 1]
     exz[kst - 1, k - 1] = exz[kst - 2, k - 1] + dexz[k - 1]
     return sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz
+
+
 
 
 class Application(Frame):
@@ -324,7 +327,7 @@ class Application(Frame):
         plastic = self.radioValue.get()
 
         return E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi, nst, plastic
-
+    
     def solver(self):
         E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi, nst, plastic = self.input()
         if plastic == 0:
@@ -462,6 +465,7 @@ class Application(Frame):
                     kglob[j - 1, j - 1] = 10 ** 16
 
                 # Solve SOLE
+                
                 du = np.dot(np.linalg.inv(kglob), dR)
 
                 # Get Strains and deforms
@@ -640,14 +644,14 @@ class Application(Frame):
             ws.cell(row=i + 2, column=9).number_format = '0.000'
 
         # второй лист
-        ws1 = wb.create_sheet("Матрица жесткости")
+        """ws1 = wb.create_sheet("Матрица жесткости")
         ws1.sheet_view.zoomScale = 85
         for i in range(n * 2):
             for j in range(n * 2):
                 ws1.cell(row=i + 1, column=j + 1).value = kglob[i, j]
                 ws1.cell(row=i + 1, column=j + 1).alignment = align_center
                 ws1.cell(row=i + 1, column=j + 1).border = border
-                ws1.cell(row=i + 1, column=j + 1).number_format = '0.00'
+                ws1.cell(row=i + 1, column=j + 1).number_format = '0.00'"""
 
         wb.save("Results.xlsx")
 
