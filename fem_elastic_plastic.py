@@ -4,6 +4,7 @@ from numba import njit
 
 # создание окна
 from tkinter import *
+import tkinter.ttk
 
 import matplotlib.ticker as ticker
 from matplotlib.figure import Figure
@@ -96,6 +97,8 @@ def stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm):
 
 @njit(cache=True)
 def stiffness_matrix_total(kglob, ki, kj, kloc, km):
+    nk1 = 0
+    nk2 = 0
     for i1 in range(0, 6):
         if 0 <= i1 <= 1:
             nk1 = ki * 2 + i1 - 2
@@ -212,6 +215,9 @@ def function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu, xi, xj
     if average == 1:
         pl[k - 2] = 8
         npl[kst - 1, it - 1] = npl[kst - 1, it - 1] + 1
+    sxF = 0
+    szF = 0
+    txzF = 0
     for kFst in np.arange(0, 1.02, 0.02):
         sxF = sx[kst - 2, k - 1] + kFst * (sx[kst - 1, k - 1] - sx[kst - 2, k - 1])
         szF = sz[kst - 2, k - 1] + kFst * (sz[kst - 1, k - 1] - sz[kst - 2, k - 1])
@@ -294,97 +300,110 @@ class Application(Frame):
 
     def create_widgets(self):
         # Elastic_modulus
-        Label(self, text="E =").grid(row=0, column=0)
+        Label(self, text="Elastic modulus(E)", font="Helvetica 9 italic").grid(row=0, column=0, sticky='w')
         self.E_ent = Entry(self, width=5, justify=CENTER)
         self.E_ent.grid(row=0, column=1)
         self.E_ent.insert(0, "10000")
-        Label(self, text="kPa").grid(row=0, column=2)
+        Label(self, text="kPa", font="Helvetica 9 italic").grid(row=0, column=2, sticky='w')
 
-        # Poissons_ratio
-        Label(self, text="v =").grid(row=1, column=0)
+        # Poisson's_ratio
+        Label(self, text="Poisson's ratio(ν)", font="Helvetica 9 italic").grid(row=1, column=0, sticky='w')
         self.nu_ent = Entry(self, width=5, justify=CENTER)
         self.nu_ent.grid(row=1, column=1)
         self.nu_ent.insert(0, "0.3")
 
         # Cohesion
-        Label(self, text="c =").grid(row=2, column=0)
+        Label(self, text="Cohesion(c)", font="Helvetica 9 italic").grid(row=2, column=0, sticky='w')
         self.c_ent = Entry(self, width=5, justify=CENTER)
         self.c_ent.grid(row=2, column=1)
         self.c_ent.insert(0, "10")
-        Label(self, text="kPa").grid(row=2, column=2)
+        Label(self, text="kPa", font="Helvetica 9 italic").grid(row=2, column=2, sticky='w')
 
-        # Friction angle
-        Label(self, text="φ =").grid(row=3, column=0)
+        # Frictional_angle
+        Label(self, text="Frictional angle(φ)", font="Helvetica 9 italic").grid(row=3, column=0, sticky='w')
         self.fi_ent = Entry(self, width=5, justify=CENTER)
         self.fi_ent.grid(row=3, column=1)
         self.fi_ent.insert(0, "30")
-        Label(self, text="°").grid(row=3, column=2)
+        Label(self, text="°").grid(row=3, column=2, sticky='w')
+
+        tkinter.ttk.Separator(self, orient=HORIZONTAL).grid(column=0, row=4, columnspan=3, sticky='we')
 
         # Pressure
-        Label(self, text="P =").grid(row=4, column=0)
+        Label(self, text="Pressure", font="Helvetica 9 italic").grid(row=5, column=0, sticky='w')
         self.pLoad_ent = Entry(self, width=5, justify=CENTER)
-        self.pLoad_ent.grid(row=4, column=1)
+        self.pLoad_ent.grid(row=5, column=1)
         self.pLoad_ent.insert(0, "1000")
-        Label(self, text="kPa").grid(row=4, column=2)
+        Label(self, text="kPa", font="Helvetica 9 italic").grid(row=5, column=2, sticky='w')
+
+        # Number_of_steps
+        Label(self, text="Steps", font="Helvetica 9 italic").grid(row=6, column=0, sticky='w')
+        self.nst_ent = Entry(self, width=5, justify=CENTER)
+        self.nst_ent.grid(row=6, column=1)
+        self.nst_ent.insert(0, "10")
+
+        tkinter.ttk.Separator(self, orient=HORIZONTAL).grid(column=0, row=7, columnspan=3, sticky='we')
 
         # Stamp width
-        Label(self, text="b =").grid(row=5, column=0)
+        Label(self, text="Stamp width", font="Helvetica 9 italic").grid(row=8, column=0, sticky='w')
         self.b_ent = Entry(self, width=5, justify=CENTER)
-        self.b_ent.grid(row=5, column=1)
+        self.b_ent.grid(row=8, column=1)
         self.b_ent.insert(0, "2")
-        Label(self, text="m").grid(row=5, column=2)
+        Label(self, text="m", font="Helvetica 9 italic").grid(row=8, column=2, sticky='w')
 
         # Object width
-        Label(self, text="ws =").grid(row=6, column=0)
+        Label(self, text="Mesh width", font="Helvetica 9 italic").grid(row=9, column=0, sticky='w')
         self.ws_ent = Entry(self, width=5, justify=CENTER)
-        self.ws_ent.grid(row=6, column=1)
+        self.ws_ent.grid(row=9, column=1)
         self.ws_ent.insert(0, "5")
-        Label(self, text="m").grid(row=6, column=2)
+        Label(self, text="m", font="Helvetica 9 italic").grid(row=9, column=2, sticky='w')
 
         # Object height
-        Label(self, text="hs =").grid(row=7, column=0)
+        Label(self, text="Mesh height", font="Helvetica 9 italic").grid(row=10, column=0, sticky='w')
         self.hs_ent = Entry(self, width=5, justify=CENTER)
-        self.hs_ent.grid(row=7, column=1)
+        self.hs_ent.grid(row=10, column=1)
         self.hs_ent.insert(0, "4")
-        Label(self, text="m").grid(row=7, column=2)
+        Label(self, text="m", font="Helvetica 9 italic").grid(row=10, column=2, sticky='w')
+
+        tkinter.ttk.Separator(self, orient=HORIZONTAL).grid(column=0, row=11, columnspan=3, sticky='we')
 
         # Width_number
-        Label(self, text="nw =").grid(row=8, column=0)
+        Label(self, text="Elements (Ox)", font="Helvetica 9 italic").grid(row=12, column=0, sticky='w')
         self.nw_ent = Entry(self, width=5, justify=CENTER)
-        self.nw_ent.grid(row=8, column=1)
+        self.nw_ent.grid(row=12, column=1)
         self.nw_ent.insert(0, "20")
 
         # Height_number
-        Label(self, text="nh =").grid(row=9, column=0)
+        Label(self, text="Elements (Oz)", font="Helvetica 9 italic").grid(row=13, column=0, sticky='w')
         self.nh_ent = Entry(self, width=5, justify=CENTER)
-        self.nh_ent.grid(row=9, column=1)
+        self.nh_ent.grid(row=13, column=1)
         self.nh_ent.insert(0, "16")
 
         # Stamp_number
-        Label(self, text="nb =").grid(row=10, column=0)
+        Label(self, text="Elements (stamp)", font="Helvetica 9 italic").grid(row=14, column=0, sticky='w')
         self.nb_ent = Entry(self, width=5, justify=CENTER)
-        self.nb_ent.grid(row=10, column=1)
+        self.nb_ent.grid(row=14, column=1)
         self.nb_ent.insert(0, "12")
 
-        # Number_of_steps
-        Label(self, text="n =").grid(row=11, column=0)
-        self.nst_ent = Entry(self, width=5, justify=CENTER)
-        self.nst_ent.grid(row=11, column=1)
-        self.nst_ent.insert(0, "10")
+        tkinter.ttk.Separator(self, orient=HORIZONTAL).grid(column=0, row=15, columnspan=3, sticky='we')
 
+        # Soil_model
+        Label(self, text="Soil model:", font="Helvetica 9 italic").grid(row=16, column=0, sticky='w')
         # Plastic
-        one = Radiobutton(self, text='El-pl', variable=self.radioValue, value=1)
-        one.grid(column=0, row=12, sticky="W")
+        one = Radiobutton(self, text='Plastic', variable=self.radioValue, value=1, font="Helvetica 9 italic")
+        one.grid(column=0, row=18, sticky="W")
         # Elastic
-        two = Radiobutton(self, text='El', variable=self.radioValue, value=0)
-        two.grid(column=0, row=13, sticky="W")
+        two = Radiobutton(self, text='Elastic', variable=self.radioValue, value=0, font="Helvetica 9 italic")
+        two.grid(column=0, row=17, sticky="W")
 
         # average
-        aver = Checkbutton(self, text='average', variable=self.var)
-        aver.grid(column=0, row=14, sticky="W")
+        aver = Checkbutton(self, text='Average', variable=self.var, font="Helvetica 9 italic")
+        aver.grid(column=0, row=19, sticky="W")
 
-        # Btn_count
-        Button(self, text="Решить", command=self.solver).grid(row=15, column=0, columnspan=3)
+        tkinter.ttk.Separator(self, orient=HORIZONTAL).grid(column=0, row=20, columnspan=3, sticky='we')
+
+        # Btn_solve
+        Button(self, text="Solve", command=self.solver, font="Helvetica 9 italic").grid(row=21, column=0,
+                                                                                        columnspan=3, sticky='EW')
 
     def input(self):
         E = float(self.E_ent.get())
@@ -644,7 +663,7 @@ class Application(Frame):
         ax.xaxis.set_major_locator(ticker.MultipleLocator(0.5))
         ax.yaxis.set_major_locator(ticker.MultipleLocator(0.5))
         canvas.draw()
-        canvas.get_tk_widget().place(x=100, y=0)
+        canvas.get_tk_widget().place(x=175, y=0)
 
         # Table_creation
         fill = PatternFill(fill_type='solid',
@@ -742,7 +761,7 @@ class Application(Frame):
 
 main_window = Tk()
 main_window.title("FEM elastic plastic")
-main_window.geometry("800x500")
+main_window.geometry("820x485")
 fig = Figure()
 ax = fig.add_subplot()
 ax.xaxis.set_major_locator(ticker.MultipleLocator(0.5))
@@ -751,7 +770,7 @@ canvas = FigureCanvasTkAgg(fig, master=main_window)
 canvas.draw()
 toolbar = NavigationToolbar2Tk(canvas, main_window)
 toolbar.update()
-toolbar.place(x=110, y=0)
-canvas.get_tk_widget().place(x=100, y=0)
+toolbar.place(x=175, y=0)
+canvas.get_tk_widget().place(x=175, y=0)
 app = Application(main_window)
 main_window.mainloop()
