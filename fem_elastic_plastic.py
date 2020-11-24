@@ -1,5 +1,6 @@
 # FEM
 import numpy as np
+from numba import njit
 
 # создание окна
 from tkinter import *
@@ -15,10 +16,16 @@ from openpyxl.styles import PatternFill, Border, Side, Alignment
 def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
     dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
     B[0, 0] = (zm - zj) / dlt
+    B[0, 1] = 0
     B[0, 2] = (zi - zm) / dlt
+    B[0, 3] = 0
     B[0, 4] = (zj - zi) / dlt
+    B[0, 5] = 0
+    B[1, 0] = 0
     B[1, 1] = (xj - xm) / dlt
+    B[1, 2] = 0
     B[1, 3] = (xm - xi) / dlt
+    B[1, 4] = 0
     B[1, 5] = (xi - xj) / dlt
     B[2, 0] = B[1, 1]
     B[2, 1] = B[0, 0]
@@ -30,6 +37,7 @@ def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
     return BT
 
 
+@njit(cache=True)
 def elastic_matrix_element(D, E, nu):
     Enu = E / (1 + nu)
     D[0, 0] = (1 - nu) / (1 - 2 * nu) * Enu
@@ -44,6 +52,7 @@ def elastic_matrix_element(D, E, nu):
     return D
 
 
+@njit(cache=True)
 def plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl, E):
     if pl[k - 1] == 0:
         return D
@@ -75,6 +84,7 @@ def plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl, E):
     return D
 
 
+@njit(cache=True)
 def stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm):
     dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
     dlt = np.abs(dlt) / 2
@@ -84,6 +94,7 @@ def stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm):
     return kloc
 
 
+@njit(cache=True)
 def stiffness_matrix_total(kglob, ki, kj, kloc, km):
     for i1 in range(0, 6):
         if 0 <= i1 <= 1:
@@ -103,6 +114,7 @@ def stiffness_matrix_total(kglob, ki, kj, kloc, km):
     return kglob
 
 
+@njit(cache=True)
 def strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz):
     dex[k - 1] = (du[2 * ki - 2] * B[0, 0] + du[2 * kj - 2] * B[0, 2] + du[2 * km - 2] * B[0, 4])
     dez[k - 1] = (du[2 * ki - 1] * B[1, 1] + du[2 * kj - 1] * B[1, 3] + du[2 * km - 1] * B[1, 5])
@@ -119,6 +131,7 @@ def strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz):
     return dex, dez, dexz, ex, ez, exz
 
 
+@njit(cache=True)
 def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz):
     dsx[k - 1] = D[0, 0] * dex[k - 1] + D[0, 1] * dez[k - 1] + D[0, 2] * dexz[k - 1]
     dsz[k - 1] = D[1, 0] * dex[k - 1] + D[1, 1] * dez[k - 1] + D[1, 2] * dexz[k - 1]
@@ -138,26 +151,67 @@ def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz):
     s3[kst - 1, k - 1] = (sx[kst - 1, k - 1] + sz[kst - 1, k - 1]) / 2 - np.sqrt((sx[kst - 1, k - 1]
                                                                                   - sz[kst - 1, k - 1]) ** 2 / 4
                                                                                  + txz[kst - 1, k - 1] ** 2)
-    return sx, sz, txz, s1, s3
+    return dex, dez, dexz, sx, sz, txz, s1, s3
 
 
+@njit(cache=True)
+def stress_average(k, dex, dez, dexz, D, dsx, dsz, dtxz, kst, sx, sz, txz, s1, s3):
+    dex[k - 1] = (dex[k - 1] + dex[k - 2]) / 2
+    dez[k - 1] = (dez[k - 1] + dez[k - 2]) / 2
+    dexz[k - 1] = (dexz[k - 1] + dexz[k - 2]) / 2
+
+    dsx[k - 1] = D[0, 0] * dex[k - 1] + D[0, 1] * dez[k - 1] + D[0, 2] * dexz[k - 1]
+    dsz[k - 1] = D[1, 0] * dex[k - 1] + D[1, 1] * dez[k - 1] + D[1, 2] * dexz[k - 1]
+    dtxz[k - 1] = D[2, 0] * dex[k - 1] + D[2, 1] * dez[k - 1] + D[2, 2] * dexz[k - 1]
+
+    if kst == 1:
+        sx[kst - 1, k - 1] = dsx[k - 1]
+        sx[kst - 1, k - 2] = dsx[k - 1]
+        sz[kst - 1, k - 1] = dsz[k - 1]
+        sz[kst - 1, k - 2] = dsz[k - 1]
+        txz[kst - 1, k - 1] = dtxz[k - 1]
+        txz[kst - 1, k - 2] = dtxz[k - 1]
+    else:
+        sx[kst - 1, k - 1] = sx[kst - 2, k - 1] + dsx[k - 1]
+        sx[kst - 1, k - 2] = sx[kst - 1, k - 1]
+        sz[kst - 1, k - 1] = sz[kst - 2, k - 1] + dsz[k - 1]
+        sz[kst - 1, k - 2] = sz[kst - 1, k - 1]
+        txz[kst - 1, k - 1] = txz[kst - 2, k - 1] + dtxz[k - 1]
+        txz[kst - 1, k - 2] = txz[kst - 1, k - 1]
+
+    s1[kst - 1, k - 1] = (sx[kst - 1, k - 1] + sz[kst - 1, k - 1]) / 2 \
+                         + np.sqrt((sx[kst - 1, k - 1] - sz[kst - 1, k - 1]) ** 2 / 4 + txz[kst - 1, k - 1] ** 2)
+    s3[kst - 1, k - 1] = (sx[kst - 1, k - 1] + sz[kst - 1, k - 1]) / 2 \
+                         - np.sqrt((sx[kst - 1, k - 1] - sz[kst - 1, k - 1]) ** 2 / 4 + txz[kst - 1, k - 1] ** 2)
+    s1[kst - 1, k - 2] = s1[kst - 1, k - 1]
+    s3[kst - 1, k - 2] = s3[kst - 1, k - 1]
+    return dex, dez, dexz, sx, sz, txz, s1, s3
+
+
+@njit(cache=True)
 def funcplast(sxFp, szFp, txzFp, fi, c):
     return np.sqrt((szFp - sxFp) ** 2 + 4 * txzFp ** 2) - ((szFp + sxFp) * np.sin(fi) + 2 * c * np.cos(fi))
 
 
 def function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu, xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR,
-                     dex, dez, dexz, ex, ez, exz, E, plastic):
+                     dex, dez, dexz, ex, ez, exz, E, plastic, average):
     if plastic == 0:
         return sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz
     Fpst = funcplast(sx[kst - 1, k - 1], sz[kst - 1, k - 1], txz[kst - 1, k - 1], fi, c)
     Fp[kst - 1, k - 1] = Fpst
     FF[kst - 1, k - 1, it - 1] = Fpst
+    if average == 1:
+        Fp[kst - 1, k - 2] = Fp[kst - 1, k - 1]
+        FF[kst - 1, k - 2, it - 1] = Fpst
     if Fpst < 0:
         return sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz
     if pl[k - 1] == 1:
         return sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz
     pl[k - 1] = 1
     npl[kst - 1, it - 1] = npl[kst - 1, it - 1] + 1
+    if average == 1:
+        pl[k - 2] = 8
+        npl[kst - 1, it - 1] = npl[kst - 1, it - 1] + 1
     for kFst in np.arange(0, 1.02, 0.02):
         sxF = sx[kst - 2, k - 1] + kFst * (sx[kst - 1, k - 1] - sx[kst - 2, k - 1])
         szF = sz[kst - 2, k - 1] + kFst * (sz[kst - 1, k - 1] - sz[kst - 2, k - 1])
@@ -169,6 +223,12 @@ def function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu, xi, xj
             txz[kst - 1, k - 1] = txzF
             Fp[kst - 1, k - 1] = Fpst
             FF[kst - 1, k - 1, it - 1] = Fpst
+            if average == 1:
+                Fp[kst - 1, k - 2] = Fp[kst - 1, k - 1]
+                FF[kst - 1, k - 2, it - 1] = Fpst
+                sx[kst - 1, k - 2] = sxF
+                sz[kst - 1, k - 2] = szF
+                txz[kst - 1, k - 2] = txzF
             break
     a0 = szF - sxF
     a1 = np.sqrt((szF - sxF) ** 2 + 4 * txzF ** 2)
@@ -208,12 +268,26 @@ def function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl, nu, xi, xj
     ex[kst - 1, k - 1] = ex[kst - 2, k - 1] + dex[k - 1]
     ez[kst - 1, k - 1] = ez[kst - 2, k - 1] + dez[k - 1]
     exz[kst - 1, k - 1] = exz[kst - 2, k - 1] + dexz[k - 1]
+
+    if average == 1:
+        sx[kst - 1, k - 2] = sx[kst - 1, k - 1]
+        sz[kst - 1, k - 2] = sz[kst - 1, k - 1]
+        txz[kst - 1, k - 2] = txz[kst - 1, k - 1]
+        Fp[kst - 1, k - 2] = Fp[kst - 1, k - 1]
+        FF[kst - 1, k - 2, it - 1] = Fpst
+        dex[k - 1] = dex[k - 2]
+        dez[k - 1] = dez[k - 2]
+        dexz[k - 1] = dexz[k - 2]
+        ex[kst - 1, k - 1] = ex[kst - 1, k - 2]
+        ez[kst - 1, k - 1] = ez[kst - 1, k - 2]
+        exz[kst - 1, k - 1] = exz[kst - 1, k - 2]
     return sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz
 
 
 class Application(Frame):
     def __init__(self, master):
         super(Application, self).__init__(master)
+        self.var = IntVar()
         self.radioValue = IntVar()
         self.grid()
         self.create_widgets()
@@ -298,15 +372,19 @@ class Application(Frame):
         self.nst_ent.grid(row=11, column=1)
         self.nst_ent.insert(0, "10")
 
-        # Btn_count
-        Button(self, text="Решить", command=self.solver).grid(row=14, column=0, columnspan=3)
-
         # Plastic
         one = Radiobutton(self, text='El-pl', variable=self.radioValue, value=1)
         one.grid(column=0, row=12, sticky="W")
         # Elastic
         two = Radiobutton(self, text='El', variable=self.radioValue, value=0)
         two.grid(column=0, row=13, sticky="W")
+
+        # average
+        aver = Checkbutton(self, text='average', variable=self.var)
+        aver.grid(column=0, row=14, sticky="W")
+
+        # Btn_count
+        Button(self, text="Решить", command=self.solver).grid(row=15, column=0, columnspan=3)
 
     def input(self):
         E = float(self.E_ent.get())
@@ -322,11 +400,12 @@ class Application(Frame):
         nb = int(self.nb_ent.get())
         nst = int(self.nst_ent.get())
         plastic = self.radioValue.get()
+        average = self.var.get()
 
-        return E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi, nst, plastic
+        return E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi, nst, plastic, average
 
     def solver(self):
-        E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi, nst, plastic = self.input()
+        E, nu, p_load, b, ws, hs, nw, nh, nb, c, fi, nst, plastic, average = self.input()
         if plastic == 0:
             nst = 1
         # Mesh create
@@ -483,12 +562,13 @@ class Application(Frame):
                         D = elastic_matrix_element(D, E, nu)
                         D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl, E)
                         dex, dez, dexz, ex, ez, exz = strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz)
-                        sx, sz, txz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz)
-                        sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz = function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl,
-                                                                             npl, nu,
-                                                                             xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR,
-                                                                             dex, dez,
-                                                                             dexz, ex, ez, exz, E, plastic)
+                        if average == 0:
+                            dex, dez, dexz, sx, sz, txz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz,
+                                                                           dtxz, s1, s3, kst, sx, sz, txz)
+                            sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz = \
+                                function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl,
+                                                 nu, xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR, dex,
+                                                 dez, dexz, ex, ez, exz, E, plastic, average)
 
                         k = k + 1
                         m = (k + 2) // 2 + i - 1
@@ -505,20 +585,28 @@ class Application(Frame):
                         D = elastic_matrix_element(D, E, nu)
                         D = plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl, E)
                         dex, dez, dexz, ex, ez, exz = strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz)
-                        sx, sz, txz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz)
-                        sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz = function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl,
-                                                                             npl, nu,
-                                                                             xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR,
-                                                                             dex, dez,
-                                                                             dexz, ex, ez, exz, E, plastic)
+                        if average == 0:
+                            dex, dez, dexz, sx, sz, txz, s1, s3 = stresses(D, dex, dez, dexz, k, dsx, dsz,
+                                                                           dtxz, s1, s3, kst, sx, sz, txz)
+                            sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz = \
+                                function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl,
+                                                 nu, xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR, dex,
+                                                 dez, dexz, ex, ez, exz, E, plastic, average)
+                        if average == 1:
+                            dex, dez, dexz, sx, sz, txz, s1, s3 = stress_average(k, dex, dez, dexz, D, dsx,
+                                                                                 dsz, dtxz, kst, sx, sz, txz, s1, s3)
+                            sx, sz, txz, ex, ez, exz, dR, npl, Fp, FF, dex, dez, dexz = \
+                                function_plastic(sx, sz, txz, kst, k, fi, c, it, Fp, FF, pl, npl,
+                                                 nu, xi, xj, xm, zi, zj, zm, ki, kj, km, B, dR, dex,
+                                                 dez, dexz, ex, ez, exz, E, plastic, average)
 
             for z in range(0, n * 2 + 1):
                 if kst == 1:
-                    u[kst-1, z - 1] = du[z - 1]
-                    R[kst-1, z - 1] = dR[z - 1]
+                    u[kst - 1, z - 1] = du[z - 1]
+                    R[kst - 1, z - 1] = dR[z - 1]
                 else:
-                    u[kst-1, z - 1] = u[kst - 2, z - 1] + du[z - 1]
-                    R[kst-1, z - 1] = R[kst - 2, z - 1] + dR[z - 1]
+                    u[kst - 1, z - 1] = u[kst - 2, z - 1] + du[z - 1]
+                    R[kst - 1, z - 1] = R[kst - 2, z - 1] + dR[z - 1]
 
         u_new = np.zeros(n)
         for i, j in zip(range(0, n * 2, 2), range(n + 1)):
@@ -639,7 +727,7 @@ class Application(Frame):
             ws.cell(row=i + 2, column=9).border = border
             ws.cell(row=i + 2, column=9).number_format = '0.000'
 
-        # второй лист
+        """# второй лист
         ws1 = wb.create_sheet("Матрица жесткости")
         ws1.sheet_view.zoomScale = 85
         for i in range(n * 2):
@@ -647,7 +735,7 @@ class Application(Frame):
                 ws1.cell(row=i + 1, column=j + 1).value = kglob[i, j]
                 ws1.cell(row=i + 1, column=j + 1).alignment = align_center
                 ws1.cell(row=i + 1, column=j + 1).border = border
-                ws1.cell(row=i + 1, column=j + 1).number_format = '0.00'
+                ws1.cell(row=i + 1, column=j + 1).number_format = '0.00'"""
 
         wb.save("Results.xlsx")
 
