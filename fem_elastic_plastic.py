@@ -1,6 +1,5 @@
 # FEM
 import numpy as np
-from numba import njit
 
 # создание окна
 from tkinter import *
@@ -38,7 +37,6 @@ def geometry_matrix_element(B, xi, xj, xm, zi, zj, zm):
     return BT
 
 
-@njit(cache=True)
 def elastic_matrix_element(D, E, nu):
     Enu = E / (1 + nu)
     D[0, 0] = (1 - nu) / (1 - 2 * nu) * Enu
@@ -53,7 +51,6 @@ def elastic_matrix_element(D, E, nu):
     return D
 
 
-@njit(cache=True)
 def plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl, E):
     if pl[k - 1] == 0:
         return D
@@ -85,7 +82,7 @@ def plastic_matrix_element(k, it, sx, sz, txz, kst, nu, fi, D, pl, E):
     return D
 
 
-@njit(cache=True)
+
 def stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm):
     dlt = xi * (zj - zm) + xj * (zm - zi) + xm * (zi - zj)
     dlt = np.abs(dlt) / 2
@@ -95,7 +92,6 @@ def stiffness_matrix_local(BT, D, B, xi, xj, xm, zi, zj, zm):
     return kloc
 
 
-@njit(cache=True)
 def stiffness_matrix_total(kglob, ki, kj, kloc, km):
     nk1 = 0
     nk2 = 0
@@ -117,7 +113,6 @@ def stiffness_matrix_total(kglob, ki, kj, kloc, km):
     return kglob
 
 
-@njit(cache=True)
 def strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz):
     dex[k - 1] = (du[2 * ki - 2] * B[0, 0] + du[2 * kj - 2] * B[0, 2] + du[2 * km - 2] * B[0, 4])
     dez[k - 1] = (du[2 * ki - 1] * B[1, 1] + du[2 * kj - 1] * B[1, 3] + du[2 * km - 1] * B[1, 5])
@@ -134,7 +129,6 @@ def strains(du, B, ki, kj, km, k, dex, dez, dexz, kst, ex, ez, exz):
     return dex, dez, dexz, ex, ez, exz
 
 
-@njit(cache=True)
 def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz):
     dsx[k - 1] = D[0, 0] * dex[k - 1] + D[0, 1] * dez[k - 1] + D[0, 2] * dexz[k - 1]
     dsz[k - 1] = D[1, 0] * dex[k - 1] + D[1, 1] * dez[k - 1] + D[1, 2] * dexz[k - 1]
@@ -157,7 +151,6 @@ def stresses(D, dex, dez, dexz, k, dsx, dsz, dtxz, s1, s3, kst, sx, sz, txz):
     return dex, dez, dexz, sx, sz, txz, s1, s3
 
 
-@njit(cache=True)
 def stress_average(k, dex, dez, dexz, D, dsx, dsz, dtxz, kst, sx, sz, txz, s1, s3):
     dex[k - 1] = (dex[k - 1] + dex[k - 2]) / 2
     dez[k - 1] = (dez[k - 1] + dez[k - 2]) / 2
@@ -191,7 +184,6 @@ def stress_average(k, dex, dez, dexz, D, dsx, dsz, dtxz, kst, sx, sz, txz, s1, s
     return dex, dez, dexz, sx, sz, txz, s1, s3
 
 
-@njit(cache=True)
 def funcplast(sxFp, szFp, txzFp, fi, c):
     return np.sqrt((szFp - sxFp) ** 2 + 4 * txzFp ** 2) - ((szFp + sxFp) * np.sin(fi) + 2 * c * np.cos(fi))
 
